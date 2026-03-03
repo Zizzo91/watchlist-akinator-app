@@ -8,7 +8,11 @@
 </head>
 <body>
     <header>
-        <h1>🍿 Watchlist Akinator</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; max-width: 600px; margin: 0 auto;">
+            <h1>🍿 Watchlist Akinator</h1>
+            <button id="btn-logout" onclick="clearTokens()" style="display: none; background-color: #333; padding: 5px 10px; font-size: 0.8em;">⚙️ Cambia Token</button>
+        </div>
+        
         <div id="auth-container">
             <input type="password" id="gh-token" placeholder="Inserisci il tuo GitHub PAT (per salvare i dati)">
             <input type="password" id="gemini-token" placeholder="Inserisci la tua API Key di Google Gemini" style="margin-top: 10px;">

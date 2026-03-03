@@ -48,8 +48,17 @@ async function saveTokens() {
     document.getElementById('auth-container').style.display = 'none';
     document.getElementById('app-nav').style.display = 'flex';
     document.getElementById('app-main').style.display = 'block';
+    document.getElementById('btn-logout').style.display = 'block';
     
     await loadData();
+}
+
+function clearTokens() {
+    if(confirm("Vuoi cancellare i token salvati e reinserirli?")) {
+        localStorage.removeItem('gh_pat');
+        localStorage.removeItem('gemini_token');
+        location.reload();
+    }
 }
 
 function setTab(tab) {
@@ -95,6 +104,7 @@ async function loadData() {
         document.getElementById('auth-container').style.display = 'block';
         document.getElementById('app-nav').style.display = 'none';
         document.getElementById('app-main').style.display = 'none';
+        document.getElementById('btn-logout').style.display = 'none';
     } finally {
         document.getElementById('loading').style.display = 'none';
     }
@@ -183,7 +193,6 @@ async function generateGeminiRecommendations() {
     const ratings = userData[currentTab].ratings;
     const typeLabel = currentTab === 'movies' ? 'film' : 'serie TV';
     
-    // Trova i preferiti (4-5 stelle), quelli non piaciuti (1-2 stelle) e quelli non visti
     let loved = [];
     let disliked = [];
     let notSeenIds = [];
@@ -209,7 +218,6 @@ async function generateGeminiRecommendations() {
         return;
     }
 
-    // Costruzione del prompt per Gemini
     const prompt = `
 Sei un esperto consigliere di ${typeLabel}. Basandoti su questi gusti dell'utente:
 - Titoli AMATI (4-5 stelle): ${loved.join(', ')}
@@ -246,12 +254,11 @@ Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione
         const data = await response.json();
         const markdownResponse = data.candidates[0].content.parts[0].text;
         
-        // Usa libreria "marked" importata nell'HTML per convertire Markdown in HTML
         recsBox.innerHTML = marked.parse(markdownResponse);
 
     } catch (err) {
         console.error("Errore Gemini:", err);
-        recsBox.innerHTML = `<p style="color:red;"><strong>Errore API Gemini:</strong> ${err.message}</p> <p>Assicurati che la chiave API sia valida.</p>`;
+        recsBox.innerHTML = `<p style="color:red;"><strong>Errore API Gemini:</strong> ${err.message}</p> <p>Controlla che l'API Key sia corretta cliccando l'ingranaggio in alto a destra.</p>`;
     } finally {
         loadingBox.style.display = 'none';
         recsBox.style.display = 'block';
