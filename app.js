@@ -252,7 +252,7 @@ function showLoading(show) {
 
 async function askGemini() {
     document.getElementById('gemini-output').style.display = 'block';
-    document.getElementById('gemini-output').innerHTML = "<em>L'Intelligenza Artificiale sta analizzando i tuoi gusti...</em>";
+    document.getElementById('gemini-output').innerHTML = "<em>L'Intelligenza Artificiale sta analizzando i tuoi gusti e cercando i titoli...</em>";
     
     const ratingsObj = currentUserData[currentTab].ratings;
     const items = catalogData[currentTab];
@@ -271,31 +271,32 @@ async function askGemini() {
             };
         });
 
-    // AUMENTATI I LIMITI PER MAGGIORE PRECISIONE (Senza rompere il Token Limit)
-    
-    // I preferiti: da 20 passiamo a 40 (circa 2-3 generazioni di context, Gemini 2.5 Flash le regge benissimo)
     let positives = allRatings.filter(r => r.rating >= 4 && !r.partial);
     positives.sort((a, b) => b.rating - a.rating || b.timestamp - a.timestamp);
     const topPositives = positives.slice(0, 40).map(r => `"${r.title}" (Genere: ${r.genres})`);
 
-    // I più odiati: da 10 passiamo a 20
     let negatives = allRatings.filter(r => r.rating <= 2 && !r.partial);
     negatives.sort((a, b) => a.rating - b.rating || b.timestamp - a.timestamp);
     const topNegatives = negatives.slice(0, 20).map(r => `"${r.title}"`);
 
-    // Quelli abbandonati: da 10 passiamo a 15
     let abandoned = allRatings.filter(r => r.partial);
     abandoned.sort((a, b) => b.timestamp - a.timestamp); 
     const topAbandoned = abandoned.slice(0, 15).map(r => `"${r.title}"`);
 
-    // Invia la lista di TUTTI i titoli visti/scartati/watchlist affinché NON li suggerisca mai.
-    // L'unica accortezza è mandare SOLO il titolo puro per risparmiare token.
-    const evaluatedTitles = allRatings.map(r => r.title);
+    // Invia la lista di *TUTTI* i titoli valutati o messi in watchlist a Gemini.
+    // Nessun taglio qui, mandiamo l'elenco completo per garantire che non ti consigli MAI roba già vista o che avevi "saltato"
+    const evaluatedTitles = Object.keys(ratingsObj).map(id => {
+        const catalogItem = items.find(i => i.id == id);
+        return catalogItem ? catalogItem.title : null;
+    }).filter(t => t);
+    
     const watchlistTitles = watchlist.map(w => w.title);
     const doNotSuggest = [...evaluatedTitles, ...watchlistTitles];
+    
+    const numSuggestions = currentTab === 'movies' ? 10 : 5;
         
     let prompt = `Agisci come un esperto sommelier di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
-Devi consigliare 3 ${currentTab === 'movies' ? 'film' : 'serie tv'} al profilo utente "${currentProfile}".
+Devi consigliare ${numSuggestions} ${currentTab === 'movies' ? 'film' : 'serie tv'} al profilo utente "${currentProfile}".
 
 ECCO IL SUO PROFILO DINAMICO:
 Ha AMATO questi titoli: ${topPositives.join(', ')}.
@@ -308,9 +309,9 @@ Non gli sono per niente piaciuti: ${topNegatives.join(', ')}.
 
     prompt += `
 REGOLE RIGIDE:
-1. NON suggerire assolutamente NESSUN titolo presente in questa lista (li ha già visti o sono in coda): ${JSON.stringify(doNotSuggest)}.
+1. NON suggerire assolutamente NESSUN titolo presente in questa lista perché li ha GIA' VISTI TUTTI o sono in coda: ${JSON.stringify(doNotSuggest)}.
 2. I titoli devono essere veri, esistenti e disponibili sulle principali piattaforme streaming italiane (Netflix, Prime, Disney, NowTV).
-3. Sii vario: non suggerire 3 titoli identici. Cerca un titolo famosissimo, uno medio e una "chicca nascosta" basata sui suoi gusti.
+3. Sii vario. Tra i ${numSuggestions} titoli, inserisci grandi classici famosissimi, titoli medi, e qualche chicca nascosta (hidden gem).
 
 Rispondi in formato JSON ESATTO con questa struttura:
 [
