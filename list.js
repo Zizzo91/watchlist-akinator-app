@@ -7,6 +7,7 @@ let userData = { movies: { ratings: {}, asked: [], watchlist: [] }, tv: { rating
 let userdataSha = '';
 let currentTab = 'movies';
 let currentView = 'history';
+let searchQuery = '';
 
 function b64DecodeUnicode(str) {
     return decodeURIComponent(atob(str).split('').map(function(c) {
@@ -29,6 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     document.getElementById('app-nav').style.display = 'flex';
     document.getElementById('view-toggle').style.display = 'flex';
+    document.getElementById('search-container').style.display = 'block';
     document.getElementById('app-main').style.display = 'flex';
     await loadData();
 });
@@ -48,20 +50,14 @@ async function loadData() {
             headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
             cache: 'no-store'
         });
-        userdataSha = (await userRes.json()).sha;
+        const rawContent = await userRes.json();
+        userdataSha = rawContent.sha;
+        userData = JSON.parse(b64DecodeUnicode(rawContent.content));
         
-        const rawContent = (await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
-            headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
-            cache: 'no-store'
-        })).json();
+        if(!userData.movies.watchlist) userData.movies.watchlist = [];
+        if(!userData.tv.watchlist) userData.tv.watchlist = [];
         
-        rawContent.then(r => {
-            userdataSha = r.sha;
-            userData = JSON.parse(b64DecodeUnicode(r.content));
-            if(!userData.movies.watchlist) userData.movies.watchlist = [];
-            if(!userData.tv.watchlist) userData.tv.watchlist = [];
-            renderList();
-        });
+        renderList();
 
     } catch (err) {
         console.error(err);
@@ -85,11 +81,16 @@ function setView(view) {
     renderList();
 }
 
+function filterList() {
+    searchQuery = document.getElementById('search-input').value.toLowerCase();
+    renderList();
+}
+
 async function changeRating(itemId) {
     const currentRating = userData[currentTab].ratings[itemId].rating;
     const newRatingStr = prompt(`Inserisci il nuovo voto per questo titolo (da 1 a 5):\nAttuale: ${currentRating}`, currentRating);
     
-    if (newRatingStr === null) return; // Annullato
+    if (newRatingStr === null) return;
     
     const newRating = parseInt(newRatingStr);
     if (isNaN(newRating) || newRating < 1 || newRating > 5) {
@@ -99,14 +100,10 @@ async function changeRating(itemId) {
 
     if (newRating === currentRating) return;
 
-    // Aggiorna in locale
     userData[currentTab].ratings[itemId].rating = newRating;
     userData[currentTab].ratings[itemId].timestamp = new Date().toISOString();
     
-    // Aggiorna l'interfaccia istantaneamente
     renderList();
-
-    // Salva su GitHub in background
     await saveUserData();
 }
 
@@ -139,13 +136,14 @@ async function saveUserData() {
 function renderList() {
     const listOutput = document.getElementById('list-output');
     const emptyState = document.getElementById('empty-state');
+    const emptyText = document.getElementById('empty-text');
     listOutput.innerHTML = '';
     
     if (currentView === 'history') {
         const ratings = userData[currentTab]?.ratings || {};
         const items = catalogData[currentTab] || [];
         
-        const ratedItems = Object.keys(ratings)
+        let ratedItems = Object.keys(ratings)
             .filter(id => ratings[id].seen === true)
             .map(id => {
                 const catalogItem = items.find(i => i.id == id);
@@ -155,12 +153,23 @@ function renderList() {
                     timestamp: ratings[id].timestamp
                 };
             })
-            .filter(i => i.title); // Rimuove eventuali orfani
+            .filter(i => i.title);
             
+        // Applica il filtro di ricerca
+        if (searchQuery) {
+            ratedItems = ratedItems.filter(item => 
+                item.title.toLowerCase().includes(searchQuery) ||
+                (item.genres && item.genres.some(g => g.toLowerCase().includes(searchQuery))) ||
+                (item.platforms && item.platforms.some(p => p.toLowerCase().includes(searchQuery))) ||
+                (item.year && item.year.toString().includes(searchQuery))
+            );
+        }
+
         ratedItems.sort((a, b) => b.rating - a.rating || new Date(b.timestamp) - new Date(a.timestamp));
 
         if (ratedItems.length === 0) {
             emptyState.style.display = 'block';
+            emptyText.innerHTML = searchQuery ? "Nessun titolo trovato per la tua ricerca." : "Non hai ancora valutato nessun titolo in questa categoria.";
             return;
         }
 
@@ -186,11 +195,20 @@ function renderList() {
         });
 
     } else if (currentView === 'watchlist') {
-        const watchlist = userData[currentTab]?.watchlist || [];
+        let watchlist = userData[currentTab]?.watchlist || [];
         
+        // Applica il filtro di ricerca anche alla watchlist
+        if (searchQuery) {
+            watchlist = watchlist.filter(item => 
+                item.title.toLowerCase().includes(searchQuery) ||
+                item.reason.toLowerCase().includes(searchQuery) ||
+                (item.year && item.year.toString().includes(searchQuery))
+            );
+        }
+
         if (watchlist.length === 0) {
             emptyState.style.display = 'block';
-            emptyState.innerHTML = "<h2>La tua Watchlist è vuota.</h2><p>Chiedi a Gemini dei consigli dalla Home e salvali qui!</p>";
+            emptyText.innerHTML = searchQuery ? "Nessun risultato nella Watchlist." : "La tua Watchlist è vuota.<br><span style='font-size:0.7em;color:#aaa'>Chiedi a Gemini dei consigli dalla Home e salvali qui!</span>";
             return;
         }
 
