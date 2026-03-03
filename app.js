@@ -1,15 +1,15 @@
 const REPO_OWNER = 'Zizzo91';
 const DATA_REPO = 'my-watchlist-data';
-let GITHUB_TOKEN = '';
-let GEMINI_TOKEN = '';
+let GITHUB_TOKEN = localStorage.getItem('gh_pat');
+let GEMINI_KEY = localStorage.getItem('gemini_key');
 
 let catalogData = { movies: [], tv: [] };
-let userData = { movies: { ratings: {}, asked: [], watchlist: [] }, tv: { ratings: {}, asked: [], watchlist: [] } };
+let globalUserData = {}; // Contiene i dati di tutti i profili
+let currentUserData = null; // Punta a globalUserData[currentProfile]
+let currentProfile = localStorage.getItem('active_profile');
 let userdataSha = '';
-
 let currentTab = 'movies';
 let currentItem = null;
-let lastGeminiRecs = []; // Array per salvare temporaneamente i consigli prima del commit in watchlist
 
 function b64DecodeUnicode(str) {
     return decodeURIComponent(atob(str).split('').map(function(c) {
@@ -24,146 +24,183 @@ function b64EncodeUnicode(str) {
     }));
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const savedGhToken = localStorage.getItem('gh_pat');
-    const savedGeminiToken = localStorage.getItem('gemini_token');
-    
-    if (savedGhToken) document.getElementById('gh-token').value = savedGhToken;
-    if (savedGeminiToken) document.getElementById('gemini-token').value = savedGeminiToken;
-    
-    if (savedGhToken && savedGeminiToken) {
-        saveTokens();
+function generateMagicLink() {
+    if (!GITHUB_TOKEN || !GEMINI_KEY) {
+        alert("Devi prima inserire i token!");
+        return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('gh', GITHUB_TOKEN);
+    url.searchParams.set('gem', GEMINI_KEY);
+    navigator.clipboard.writeText(url.toString()).then(() => {
+        alert("Magic Link copiato negli appunti!\nInvia questo link a Michela, quando lo aprirà si salveranno i token in automatico senza che debba digitarli.");
+    });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (GITHUB_TOKEN && GEMINI_KEY) {
+        document.getElementById('auth-container').style.display = 'none';
+        await loadData();
+    } else {
+        document.getElementById('auth-container').style.display = 'block';
     }
 });
 
-async function saveTokens() {
-    GITHUB_TOKEN = document.getElementById('gh-token').value.trim();
-    GEMINI_TOKEN = document.getElementById('gemini-token').value.trim();
-    
-    if (!GITHUB_TOKEN) return alert('Inserisci il token di GitHub!');
-    if (!GEMINI_TOKEN) return alert('Inserisci la chiave API di Gemini!');
-    
+function saveTokens() {
+    GITHUB_TOKEN = document.getElementById('gh-pat').value.trim();
+    GEMINI_KEY = document.getElementById('gemini-key').value.trim();
+    if (!GITHUB_TOKEN || !GEMINI_KEY) {
+        alert('Inserisci entrambi i token!');
+        return;
+    }
     localStorage.setItem('gh_pat', GITHUB_TOKEN);
-    localStorage.setItem('gemini_token', GEMINI_TOKEN);
-    
+    localStorage.setItem('gemini_key', GEMINI_KEY);
     document.getElementById('auth-container').style.display = 'none';
-    document.getElementById('app-nav').style.display = 'flex';
-    document.getElementById('links-container').style.display = 'flex';
-    document.getElementById('app-main').style.display = 'block';
-    document.getElementById('btn-logout').style.display = 'block';
-    
-    await loadData();
+    loadData();
 }
 
-function clearTokens() {
-    if(confirm("Vuoi cancellare i token salvati e reinserirli?")) {
-        localStorage.removeItem('gh_pat');
-        localStorage.removeItem('gemini_token');
-        location.reload();
+async function loadData() {
+    try {
+        const catalogRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/catalog.json`, {
+            headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
+            cache: 'no-store'
+        });
+        if (!catalogRes.ok) throw new Error("Errore nel caricamento del catalogo.");
+        catalogData = JSON.parse(b64DecodeUnicode((await catalogRes.json()).content));
+
+        const userRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
+            headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
+            cache: 'no-store'
+        });
+        const rawContent = await userRes.json();
+        userdataSha = rawContent.sha;
+        let parsedData = JSON.parse(b64DecodeUnicode(rawContent.content));
+
+        // MIGRATION SCRIPT: Se il file ha il vecchio formato, convertilo al formato Multi-Profilo
+        if (parsedData.movies && !parsedData.Simone) {
+            console.log("Migrazione dati al formato Multi-Profilo in corso...");
+            globalUserData = {
+                "Simone": {
+                    movies: parsedData.movies || { ratings: {}, asked: [], watchlist: [] },
+                    tv: parsedData.tv || { ratings: {}, asked: [], watchlist: [] }
+                },
+                "Michela": {
+                    movies: { ratings: {}, asked: [], watchlist: [] },
+                    tv: { ratings: {}, asked: [], watchlist: [] }
+                }
+            };
+            // Salva subito la migrazione
+            await forceSaveUserData("Migrazione formato Multi-Profilo");
+        } else {
+            globalUserData = parsedData;
+        }
+
+        if (currentProfile && globalUserData[currentProfile]) {
+            startApp(currentProfile);
+        } else {
+            document.getElementById('profile-container').style.display = 'block';
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert("Errore caricamento dati: " + err.message);
+        document.getElementById('auth-container').style.display = 'block';
     }
+}
+
+function selectProfile(profileName) {
+    localStorage.setItem('active_profile', profileName);
+    startApp(profileName);
+}
+
+function changeProfile() {
+    localStorage.removeItem('active_profile');
+    document.getElementById('game-container').style.display = 'none';
+    document.getElementById('profile-container').style.display = 'block';
+}
+
+function startApp(profileName) {
+    currentProfile = profileName;
+    currentUserData = globalUserData[currentProfile];
+    
+    // Inizializza chiavi mancanti per sicurezza
+    if(!currentUserData.movies) currentUserData.movies = { ratings:{}, asked:[], watchlist:[] };
+    if(!currentUserData.tv) currentUserData.tv = { ratings:{}, asked:[], watchlist:[] };
+    if(!currentUserData.movies.watchlist) currentUserData.movies.watchlist = [];
+    if(!currentUserData.tv.watchlist) currentUserData.tv.watchlist = [];
+
+    document.getElementById('profile-container').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
+    document.getElementById('current-profile-display').innerText = `👁️ Profilo: ${currentProfile}`;
+
+    renderNextItem();
 }
 
 function setTab(tab) {
     currentTab = tab;
     document.getElementById('btn-movies').classList.toggle('active', tab === 'movies');
     document.getElementById('btn-tv').classList.toggle('active', tab === 'tv');
-    document.getElementById('recs-output').style.display = 'none';
-    document.getElementById('save-recs-btn').style.display = 'none';
+    document.getElementById('gemini-output').style.display = 'none';
     renderNextItem();
-}
-
-async function fetchFromGitHub(path) {
-    const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/${path}`, {
-        headers: {
-            'Authorization': `Bearer ${GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json'
-        },
-        cache: 'no-store'
-    });
-    if (!response.ok) throw new Error(`Errore fetch ${path}: ${response.statusText}`);
-    return response.json();
-}
-
-async function loadData() {
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('card-container').style.display = 'none';
-
-    try {
-        const catalogRes = await fetchFromGitHub('catalog.json');
-        catalogData = JSON.parse(b64DecodeUnicode(catalogRes.content));
-
-        const userRes = await fetchFromGitHub('userdata.json');
-        userdataSha = userRes.sha;
-        userData = JSON.parse(b64DecodeUnicode(userRes.content));
-
-        if(!userData.movies) userData.movies = { ratings: {}, asked: [], watchlist: [] };
-        if(!userData.tv) userData.tv = { ratings: {}, asked: [], watchlist: [] };
-        if(!userData.movies.watchlist) userData.movies.watchlist = [];
-        if(!userData.tv.watchlist) userData.tv.watchlist = [];
-
-        renderNextItem();
-    } catch (err) {
-        alert("Errore nel caricamento dei dati. Assicurati che i token siano corretti e che catalog.json esista.");
-        console.error(err);
-        document.getElementById('auth-container').style.display = 'block';
-        document.getElementById('app-nav').style.display = 'none';
-        document.getElementById('links-container').style.display = 'none';
-        document.getElementById('app-main').style.display = 'none';
-        document.getElementById('btn-logout').style.display = 'none';
-    } finally {
-        document.getElementById('loading').style.display = 'none';
-    }
 }
 
 function renderNextItem() {
-    const items = catalogData[currentTab] || [];
-    const asked = userData[currentTab].asked || [];
+    const items = catalogData[currentTab];
+    const askedList = currentUserData[currentTab].asked || [];
     
-    currentItem = items.find(item => !asked.includes(item.id));
-
-    if (!currentItem) {
-        document.getElementById('card-container').style.display = 'none';
-        document.getElementById('no-more-items').style.display = 'block';
+    const unseenItems = items.filter(i => !askedList.includes(i.id));
+    
+    if (unseenItems.length === 0) {
+        document.getElementById('item-content').innerHTML = "<h2>Hai esaurito il catalogo!</h2><p>Vai su 'Aggiorna TMDB' per aggiungere nuovi titoli.</p>";
         return;
     }
-
-    document.getElementById('card-container').style.display = 'block';
-    document.getElementById('no-more-items').style.display = 'none';
-
-    const posterUrl = currentItem.poster || 'https://via.placeholder.com/300x450?text=No+Poster';
-    document.getElementById('item-poster').src = posterUrl;
-    document.getElementById('item-title').textContent = currentItem.title;
     
-    const genres = (currentItem.genres || []).join(', ');
-    const platforms = (currentItem.platforms || []).join(', ');
-    document.getElementById('item-details').textContent = `${currentItem.year} | ${genres} | ${platforms}`;
+    const randomIndex = Math.floor(Math.random() * unseenItems.length);
+    currentItem = unseenItems[randomIndex];
+    
+    document.getElementById('item-title').innerText = `${currentItem.title} (${currentItem.year})`;
+    const posterSrc = currentItem.poster || 'https://via.placeholder.com/200x300?text=No+Poster';
+    document.getElementById('item-poster').src = posterSrc;
+    document.getElementById('item-details').innerText = `Generi: ${(currentItem.genres || []).join(', ')} | Su: ${(currentItem.platforms || []).join(', ')}`;
 }
 
-async function rateItem(stars) {
-    if(!currentItem) return;
-    userData[currentTab].ratings[currentItem.id] = { rating: stars, seen: true, timestamp: new Date().toISOString() };
-    userData[currentTab].asked.push(currentItem.id);
-    renderNextItem();
+async function rateItem(score) {
+    if (!currentItem) return;
+    showLoading(true);
+    
+    currentUserData[currentTab].ratings[currentItem.id] = { rating: score, seen: true, timestamp: new Date().toISOString() };
+    currentUserData[currentTab].asked.push(currentItem.id);
+    
     await saveUserData();
+    showLoading(false);
+    renderNextItem();
 }
 
 async function markNotSeen() {
-    if(!currentItem) return;
-    userData[currentTab].ratings[currentItem.id] = { seen: false, timestamp: new Date().toISOString() };
-    userData[currentTab].asked.push(currentItem.id);
-    renderNextItem();
+    if (!currentItem) return;
+    showLoading(true);
+    
+    currentUserData[currentTab].ratings[currentItem.id] = { seen: false, timestamp: new Date().toISOString() };
+    currentUserData[currentTab].asked.push(currentItem.id);
+    
     await saveUserData();
+    showLoading(false);
+    renderNextItem();
 }
 
-async function skipItem() {
-    if(!currentItem) return;
-    userData[currentTab].asked.push(currentItem.id);
+function skipItem() {
+    if (!currentItem) return;
+    // Semplicemente lo aggiungiamo ad asked per non riproporlo, ma non lo valutiamo
+    currentUserData[currentTab].asked.push(currentItem.id);
     renderNextItem();
-    await saveUserData();
 }
 
 async function saveUserData() {
-    const content = b64EncodeUnicode(JSON.stringify(userData, null, 2));
+    await forceSaveUserData(`Aggiunta valutazione ${currentTab} per ${currentProfile}`);
+}
+
+async function forceSaveUserData(commitMessage) {
+    const content = b64EncodeUnicode(JSON.stringify(globalUserData, null, 2));
     try {
         const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
             method: 'PUT',
@@ -173,7 +210,7 @@ async function saveUserData() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: "Akinator: Update user progress",
+                message: commitMessage,
                 content: content,
                 sha: userdataSha
             })
@@ -184,135 +221,111 @@ async function saveUserData() {
         userdataSha = data.content.sha;
     } catch (err) {
         console.error("Salvataggio fallito:", err);
+        alert("Si è verificato un errore nel salvataggio dei dati su GitHub.");
     }
 }
 
-// Integrazione API Google Gemini JSON Mode
-async function generateGeminiRecommendations() {
-    const recsBox = document.getElementById('recs-output');
-    const loadingBox = document.getElementById('recs-loading');
-    const saveBtn = document.getElementById('save-recs-btn');
+function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'block' : 'none';
+    document.getElementById('item-content').style.opacity = show ? '0.3' : '1';
+}
+
+async function askGemini() {
+    document.getElementById('gemini-output').style.display = 'block';
+    document.getElementById('gemini-output').innerHTML = "<em>L'Intelligenza Artificiale sta analizzando i tuoi gusti...</em>";
     
-    recsBox.style.display = 'none';
-    saveBtn.style.display = 'none';
-    loadingBox.style.display = 'block';
-
-    const ratings = userData[currentTab].ratings;
-    const typeLabel = currentTab === 'movies' ? 'film' : 'serie TV';
+    const ratings = currentUserData[currentTab].ratings;
+    const items = catalogData[currentTab];
+    const watchlist = currentUserData[currentTab].watchlist || [];
     
-    let loved = [];
-    let disliked = [];
-
-    // Crea elenchi anche con roba in watchlist per dirgli di non suggerirla
-    const existingWatchlistTitles = (userData[currentTab].watchlist || []).map(w => w.title);
-
-    Object.keys(ratings).forEach(id => {
-        const item = catalogData[currentTab].find(i => i.id == id);
-        if(!item) return;
+    const positiveItems = Object.keys(ratings)
+        .filter(id => ratings[id].seen && ratings[id].rating >= 4)
+        .map(id => items.find(i => i.id == id)?.title)
+        .filter(t => t);
         
-        const r = ratings[id];
-        if(r.rating >= 4) {
-            loved.push(item.title);
-        } else if(r.rating <= 2) {
-            disliked.push(item.title);
-        }
-    });
+    const negativeItems = Object.keys(ratings)
+        .filter(id => ratings[id].seen && ratings[id].rating <= 2)
+        .map(id => items.find(i => i.id == id)?.title)
+        .filter(t => t);
 
-    if (loved.length === 0) {
-        loadingBox.style.display = 'none';
-        recsBox.style.display = 'block';
-        recsBox.innerHTML = `<p>Devi valutare almeno un paio di ${typeLabel} con 4 o 5 stelle prima di poter chiedere consigli all'IA!</p>`;
-        return;
-    }
+    // Titoli che l'utente ha già in watchlist o ha già valutato, per evitare che Gemini li suggerisca
+    const evaluatedTitles = Object.keys(ratings)
+        .filter(id => ratings[id].seen)
+        .map(id => items.find(i => i.id == id)?.title)
+        .filter(t => t);
+    
+    const watchlistTitles = watchlist.map(w => w.title);
+    const doNotSuggest = [...evaluatedTitles, ...watchlistTitles];
+        
+    const prompt = `Sei un esperto di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
+L'utente ${currentProfile} ha apprezzato molto: ${positiveItems.join(', ')}.
+Non gli sono piaciuti molto: ${negativeItems.join(', ')}.
+NON suggerire assolutamente questi titoli perché li conosce già o li ha in lista: ${doNotSuggest.join(', ')}.
 
-    const prompt = `
-Sei un esperto consigliere di ${typeLabel}. Basandoti su questi gusti:
-- Titoli AMATI: ${loved.join(', ')}
-- Titoli NON PIACIUTI: ${disliked.length > 0 ? disliked.join(', ') : 'Nessuno finora'}
-- GIA' NELLA WATCHLIST: ${existingWatchlistTitles.length > 0 ? existingWatchlistTitles.join(', ') : 'Nessuno'}
-
-Trova i 5 migliori ${typeLabel} che l'utente quasi certamente adorerà. 
-NON PROPORRE ASSOLUTAMENTE i titoli che sono già negli elenchi "AMATI", "NON PIACIUTI" o "GIA' NELLA WATCHLIST".
-
-RESTITUISCI SOLO UN ARRAY JSON VALIDO (senza markdown blocks o backticks).
-Formato obbligatorio:
+Suggerisci 3 ${currentTab === 'movies' ? 'film' : 'serie tv'} disponibili in streaming in Italia che potrebbero piacergli moltissimo.
+Rispondi in formato JSON ESATTO con questa struttura:
 [
-  {
-    "title": "Titolo Esatto del Film o Serie",
-    "year": 2023,
-    "reason": "Perché ha amato X e Y, questo thriller psicologico è perfetto..."
-  }
-]`;
+  { "title": "Titolo", "year": 2023, "reason": "Breve motivo per cui gli piacerà in base ai suoi gusti" }
+]
+Solo il JSON valido, niente formattazione markdown.`;
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_TOKEN}`;
-        
-        const response = await fetch(url, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { 
-                    temperature: 0.7,
-                    responseMimeType: "application/json" 
-                }
+                generationConfig: { temperature: 0.7 }
             })
         });
 
-        if(!response.ok) throw new Error("Errore API Gemini");
-
-        const data = await response.json();
-        const jsonText = data.candidates[0].content.parts[0].text;
+        const data = await res.json();
+        let text = data.candidates[0].content.parts[0].text;
         
-        lastGeminiRecs = JSON.parse(jsonText);
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const suggestions = JSON.parse(text);
         
-        let htmlOutput = "<h3>🤖 L'IA ti consiglia:</h3><ul style='padding-left:20px;'>";
-        lastGeminiRecs.forEach(rec => {
-            htmlOutput += `<li style='margin-bottom: 10px;'>
-                <strong>${rec.title} (${rec.year})</strong><br>
-                <span style='color:#bbb; font-size:0.9em;'>${rec.reason}</span>
-            </li>`;
+        let html = "<ul style='padding-left: 20px;'>";
+        suggestions.forEach(s => {
+            const escapedTitle = s.title.replace(/'/g, "\\'");
+            const escapedReason = s.reason.replace(/'/g, "\\'");
+            html += `
+                <li>
+                    <strong>${s.title} (${s.year})</strong><br>
+                    <span class="small-text">${s.reason}</span><br>
+                    <button class="btn-primary" style="background-color: var(--success-color); padding: 5px 10px; margin-top: 8px; font-size: 0.8em; width: auto;" 
+                            onclick="addToWatchlist('${escapedTitle}', ${s.year}, '${escapedReason}')">
+                        + Salva in Watchlist
+                    </button>
+                </li>
+            `;
         });
-        htmlOutput += "</ul>";
-        
-        recsBox.innerHTML = htmlOutput;
-        saveBtn.style.display = 'block'; // Mostra il bottone per salvare
+        html += "</ul>";
+        document.getElementById('gemini-output').innerHTML = html;
 
     } catch (err) {
-        console.error("Errore Gemini:", err);
-        recsBox.innerHTML = `<p style="color:red;"><strong>Errore:</strong> Impossibile generare consigli. Riprova.</p>`;
-    } finally {
-        loadingBox.style.display = 'none';
-        recsBox.style.display = 'block';
+        console.error(err);
+        document.getElementById('gemini-output').innerHTML = "<em style='color:red;'>Errore nella generazione con Gemini. Riprova.</em>";
     }
 }
 
-async function saveGeminiRecommendations() {
-    if(lastGeminiRecs.length === 0) return;
+async function addToWatchlist(title, year, reason) {
+    if(!currentUserData[currentTab].watchlist) currentUserData[currentTab].watchlist = [];
     
-    const saveBtn = document.getElementById('save-recs-btn');
-    saveBtn.innerText = "⏳ Salvataggio in corso...";
-    saveBtn.disabled = true;
-
-    // Aggiungi all'array esistente della watchlist
-    const currentList = userData[currentTab].watchlist || [];
+    // Controlla che non sia già in lista
+    const exists = currentUserData[currentTab].watchlist.find(i => i.title === title);
+    if(exists) {
+        alert("Questo titolo è già nella tua Watchlist!");
+        return;
+    }
     
-    lastGeminiRecs.forEach(rec => {
-        // Aggiungi timestamp e un ID fittizio generato dal titolo per sicurezza
-        currentList.push({
-            id: 'gemini_' + Date.now() + Math.floor(Math.random()*1000),
-            title: rec.title,
-            year: rec.year,
-            reason: rec.reason,
-            timestamp: new Date().toISOString()
-        });
+    currentUserData[currentTab].watchlist.push({
+        title: title,
+        year: year,
+        reason: reason,
+        addedAt: new Date().toISOString()
     });
-
-    userData[currentTab].watchlist = currentList;
-
+    
     await saveUserData();
-
-    saveBtn.innerText = "✅ Salvato in Watchlist!";
-    saveBtn.style.backgroundColor = "#1b5e20";
-    setTimeout(() => { saveBtn.style.display = 'none'; }, 3000);
+    alert(`"${title}" aggiunto alla Watchlist di ${currentProfile}!`);
 }

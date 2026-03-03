@@ -3,7 +3,9 @@ const DATA_REPO = 'my-watchlist-data';
 let GITHUB_TOKEN = localStorage.getItem('gh_pat');
 
 let catalogData = { movies: [], tv: [] };
-let userData = { movies: { ratings: {}, asked: [], watchlist: [] }, tv: { ratings: {}, asked: [], watchlist: [] } };
+let globalUserData = {}; // Contiene l'intero JSON Multi-Profilo
+let userData = null; // Punta al profilo attivo
+let currentProfile = localStorage.getItem('active_profile');
 let userdataSha = '';
 let currentTab = 'movies';
 let currentView = 'history';
@@ -28,6 +30,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = 'index.html';
         return;
     }
+    if (!currentProfile) {
+        alert("Devi prima selezionare un Profilo dalla Home!");
+        window.location.href = 'index.html';
+        return;
+    }
+
+    document.getElementById('profile-name-header').innerText = `Lista di ${currentProfile}`;
+    
     document.getElementById('app-nav').style.display = 'flex';
     document.getElementById('view-toggle').style.display = 'flex';
     document.getElementById('search-container').style.display = 'block';
@@ -52,7 +62,16 @@ async function loadData() {
         });
         const rawContent = await userRes.json();
         userdataSha = rawContent.sha;
-        userData = JSON.parse(b64DecodeUnicode(rawContent.content));
+        globalUserData = JSON.parse(b64DecodeUnicode(rawContent.content));
+        
+        // Verifica se è ancora nel vecchio formato (dovrebbe già essere stato migrato in app.js, ma sicurezza in più)
+        if (!globalUserData[currentProfile]) {
+            alert(`Profilo ${currentProfile} non trovato nei dati. Torna alla home per forzare la migrazione.`);
+            window.location.href = 'index.html';
+            return;
+        }
+
+        userData = globalUserData[currentProfile];
         
         if(!userData.movies.watchlist) userData.movies.watchlist = [];
         if(!userData.tv.watchlist) userData.tv.watchlist = [];
@@ -108,7 +127,8 @@ async function changeRating(itemId) {
 }
 
 async function saveUserData() {
-    const content = b64EncodeUnicode(JSON.stringify(userData, null, 2));
+    // globalUserData viene salvato, che contiene tutti i profili
+    const content = b64EncodeUnicode(JSON.stringify(globalUserData, null, 2));
     try {
         const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
             method: 'PUT',
@@ -118,7 +138,7 @@ async function saveUserData() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: "Update rating from List view",
+                message: `Update rating/list for ${currentProfile}`,
                 content: content,
                 sha: userdataSha
             })
@@ -155,7 +175,6 @@ function renderList() {
             })
             .filter(i => i.title);
             
-        // Applica il filtro di ricerca
         if (searchQuery) {
             ratedItems = ratedItems.filter(item => 
                 item.title.toLowerCase().includes(searchQuery) ||
@@ -197,7 +216,6 @@ function renderList() {
     } else if (currentView === 'watchlist') {
         let watchlist = userData[currentTab]?.watchlist || [];
         
-        // Applica il filtro di ricerca anche alla watchlist
         if (searchQuery) {
             watchlist = watchlist.filter(item => 
                 item.title.toLowerCase().includes(searchQuery) ||

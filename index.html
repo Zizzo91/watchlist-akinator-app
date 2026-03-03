@@ -2,75 +2,108 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#0b0b0c">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Watchlist Akinator</title>
     <link rel="stylesheet" href="style.css">
+    <script>
+        // Gestione "Magic Link" per evitare di far inserire i token a mano agli altri utenti
+        const urlParams = new URLSearchParams(window.location.search);
+        const ghToken = urlParams.get('gh');
+        const gemKey = urlParams.get('gem');
+        if (ghToken && gemKey) {
+            localStorage.setItem('gh_pat', ghToken);
+            localStorage.setItem('gemini_key', gemKey);
+            // Pulisce l'URL in modo che se condivide per sbaglio la pagina, i token non rimangono visibili
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    </script>
 </head>
 <body>
     <header>
-        <div style="display: flex; justify-content: space-between; align-items: center; max-width: 600px; margin: 0 auto;">
-            <h1>🍿 Watchlist Akinator</h1>
-            <button id="btn-logout" onclick="clearTokens()" style="display: none; background-color: #333; width: auto; padding: 8px 12px; font-size: 0.85em;">⚙️ Token</button>
-        </div>
-        
-        <div id="auth-container">
-            <h2 style="margin-top:0; font-size: 1.3rem;">Benvenuto!</h2>
-            <p class="small-text" style="margin-bottom:20px;">Collega il tuo GitHub e Google Gemini per iniziare.</p>
-            <input type="password" id="gh-token" placeholder="GitHub PAT (repo data)">
-            <input type="password" id="gemini-token" placeholder="Google Gemini API Key">
-            <button onclick="saveTokens()" style="margin-top: 10px;">Accedi</button>
-        </div>
-        
-        <nav id="app-nav" style="display: none;">
-            <button onclick="setTab('movies')" id="btn-movies" class="active">🎬 Film</button>
-            <button onclick="setTab('tv')" id="btn-tv">📺 Serie TV</button>
-        </nav>
-        
-        <div id="links-container" style="display: none;">
-            <a href="list.html">📋 La Mia Lista</a>
-            <a href="updater.html">⚙️ Aggiorna TMDB</a>
-        </div>
+        <h1>🎬 Watchlist Akinator</h1>
+        <p>Valuta i titoli che hai visto per ottenere suggerimenti sempre migliori!</p>
     </header>
 
-    <main id="app-main" style="display: none;">
-        <section id="quiz-section">
-            <div id="loading" style="display: none; text-align:center; padding: 40px;">Caricamento catalogo... ⏳</div>
-            <div id="card-container" class="card">
-                <img id="item-poster" src="" alt="Poster" />
-                <h2 id="item-title">Titolo</h2>
-                <p id="item-details" class="details">Anno | Generi | Piattaforme</p>
-                
-                <div class="actions">
-                    <h3 style="font-size: 1.1rem; margin-bottom: 15px;">Lo hai visto?</h3>
-                    <div class="stars">
-                        <button onclick="rateItem(1)">1</button>
-                        <button onclick="rateItem(2)">2</button>
-                        <button onclick="rateItem(3)">3</button>
-                        <button onclick="rateItem(4)">4</button>
-                        <button onclick="rateItem(5)">5</button>
-                    </div>
-                    <div class="other-actions">
-                        <button onclick="markNotSeen()" class="btn-secondary">Non visto</button>
-                        <button onclick="skipItem()" class="btn-tertiary">Salta</button>
-                    </div>
+    <main id="app-main">
+        <!-- Schermata di Login Token (nascosta se i token sono già salvati) -->
+        <div id="auth-container" class="card" style="margin-bottom: 30px;">
+            <h2 style="margin-top:0;">Configurazione API</h2>
+            <p style="color:var(--text-muted); font-size:0.9em; margin-bottom:20px;">
+                I token rimangono salvati nel browser.
+            </p>
+            <input type="password" id="gh-pat" placeholder="GitHub Personal Access Token">
+            <input type="password" id="gemini-key" placeholder="Google Gemini API Key">
+            <button onclick="saveTokens()" class="btn-primary">Salva ed Entra</button>
+        </div>
+
+        <!-- Schermata Scelta Profilo -->
+        <div id="profile-container" style="display: none; text-align: center; margin-bottom: 30px;" class="card">
+            <h2>Chi sta guardando?</h2>
+            <div class="profiles-wrapper">
+                <div class="profile-card" onclick="selectProfile('Simone')">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Simone&backgroundColor=e50914" alt="Simone">
+                    <h3>Simone</h3>
+                </div>
+                <div class="profile-card" onclick="selectProfile('Michela')">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Michela&backgroundColor=8a2be2" alt="Michela">
+                    <h3>Michela</h3>
                 </div>
             </div>
-            <div id="no-more-items" class="card" style="display: none;">
-                <h2>Hai finito i titoli nel catalogo! 🎉</h2>
-                <p class="details">È il momento di chiedere a Gemini dei consigli o aggiornare il catalogo con le API di TMDB per avere nuove domande.</p>
+            <p style="margin-top: 25px; font-size: 0.85em; color: var(--text-muted);">
+                Vuoi far accedere Michela senza farle digitare i token?<br>
+                <a href="#" onclick="generateMagicLink()" style="color: var(--accent-color);">Copia il Magic Link</a> e mandaglielo!
+            </p>
+        </div>
+
+        <!-- Area di Gioco (Akinator) -->
+        <div id="game-container" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <span id="current-profile-display" style="font-weight:bold; color:var(--star-color);"></span>
+                <button onclick="changeProfile()" class="btn-tertiary" style="width:auto; padding: 5px 12px; font-size:0.8em;">Cambia Profilo</button>
             </div>
-        </section>
 
-        <section id="recommendations-section" style="max-width: 450px; margin: 25px auto 0 auto;">
-            <button onclick="generateGeminiRecommendations()" class="btn-primary" style="background-color: var(--gemini-color);">✨ Genera titoli con IA</button>
-            <div id="recs-loading" style="display:none; margin-top: 20px; text-align: center;">🤖 L'intelligenza artificiale sta analizzando i tuoi gusti...</div>
-            <div id="recs-output" class="recs-box" style="display:none;"></div>
-            <button id="save-recs-btn" onclick="saveGeminiRecommendations()" class="btn-primary" style="display:none; margin-top:15px; background-color: var(--success-color);">💾 Salva in Watchlist</button>
-        </section>
+            <nav id="app-nav">
+                <button onclick="setTab('movies')" id="btn-movies" class="active">Film</button>
+                <button onclick="setTab('tv')" id="btn-tv">Serie TV</button>
+            </nav>
+
+            <div id="item-card" class="card">
+                <div id="loading" style="display: none;">Caricamento in corso...</div>
+                
+                <div id="item-content">
+                    <img id="item-poster" src="" alt="Poster">
+                    <h2 id="item-title"></h2>
+                    <p id="item-details" class="details"></p>
+                    
+                    <h3>L'hai già visto? Che voto gli dai?</h3>
+                    <div class="stars">
+                        <button onclick="rateItem(1)" title="Pessimo">1</button>
+                        <button onclick="rateItem(2)" title="Scadente">2</button>
+                        <button onclick="rateItem(3)" title="Sufficiente">3</button>
+                        <button onclick="rateItem(4)" title="Bello">4</button>
+                        <button onclick="rateItem(5)" title="Capolavoro">5</button>
+                    </div>
+                    
+                    <div class="other-actions">
+                        <button onclick="markNotSeen()" class="btn-secondary">Non l'ho visto</button>
+                        <button onclick="skipItem()" class="btn-tertiary">Salta / Non so</button>
+                    </div>
+                </div>
+
+                <div id="links-container">
+                    <a href="list.html" id="link-list">📋 La Mia Lista</a>
+                    <a href="updater.html" id="link-updater">🔄 Aggiorna TMDB</a>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 25px 0;">
+
+                <div style="margin-top: 20px;">
+                    <button onclick="askGemini()" class="btn-primary" style="background-color: var(--gemini-color);">✨ Chiedi un Consiglio a Gemini ✨</button>
+                    <div id="gemini-output" class="recs-box" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
     </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
