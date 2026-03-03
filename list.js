@@ -200,15 +200,12 @@ async function askManualAdd() {
     }
 }
 
-// === NUOVE FUNZIONI DI CANCELLAZIONE E SPOSTAMENTO ===
-
 async function deleteFromHistory(itemId, title) {
     if (!confirm(`Sei sicuro di voler ELIMINARE "${title}" dal tuo Storico Votati?\nL'intelligenza artificiale non terrà più conto di questo voto.`)) {
         return;
     }
     
     delete userData[currentTab].ratings[itemId];
-    // Rimuoviamo anche da "asked" così ti verrà riproposto in futuro nel quiz
     userData[currentTab].asked = userData[currentTab].asked.filter(id => id !== itemId);
     
     renderList();
@@ -242,10 +239,8 @@ async function markWatchlistAsSeen(title, itemId) {
         isPartial = !confirmPartial; 
     }
     
-    // Rimuovi dalla watchlist
     userData[currentTab].watchlist = userData[currentTab].watchlist.filter(item => item.title !== title);
     
-    // Se ha l'ID (generato da TMDB o dal Quiz), lo salviamo nei ratings normali
     if (itemId) {
         if (!userData[currentTab].ratings) userData[currentTab].ratings = {};
         userData[currentTab].ratings[itemId] = {
@@ -258,8 +253,6 @@ async function markWatchlistAsSeen(title, itemId) {
             userData[currentTab].asked.push(itemId);
         }
     } else {
-        // Se NON ha ancora l'ID (aggiunto manualmente e non ancora scansionato dal bot), 
-        // lo spostiamo nella manual_queue dello storico
         if (!userData[currentTab].manual_queue) userData[currentTab].manual_queue = [];
         userData[currentTab].manual_queue.push({
             title: title,
@@ -272,8 +265,6 @@ async function markWatchlistAsSeen(title, itemId) {
     await saveUserData();
     alert(`"${title}" spostato con successo nello Storico con voto ${rating}⭐!`);
 }
-
-// =======================================================
 
 async function changeRating(itemId) {
     const currentEntry = userData[currentTab].ratings[itemId];
@@ -327,6 +318,15 @@ async function saveUserData() {
         console.error("Salvataggio fallito:", err);
         alert("Si è verificato un errore nel salvataggio dei dati su GitHub.");
     }
+}
+
+function copyTitle(title) {
+    navigator.clipboard.writeText(title).then(() => {
+        const toast = document.getElementById("toast");
+        toast.innerText = `"${title}" copiato negli appunti!`;
+        toast.className = "show";
+        setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+    });
 }
 
 function renderList() {
@@ -414,19 +414,21 @@ function renderList() {
             const ratingClass = item.isManual ? '' : 'editable-rating';
             const ratingTitle = item.isManual ? 'In attesa di scansione...' : 'Clicca per modificare il voto';
             
-            // Bottone elimina (solo se ha un ID vero, non manuale, per evitare casini di indici)
-            const deleteBtnHtml = !item.isManual ? `<button class="delete-btn" onclick="deleteFromHistory(${item.id}, '${item.title.replace(/'/g, "\\'")}')" title="Rimuovi dallo storico">✖</button>` : '';
+            const escapedTitle = item.title.replace(/'/g, "\\'");
+            const deleteBtnHtml = !item.isManual ? `<button class="delete-btn" onclick="deleteFromHistory(${item.id}, '${escapedTitle}')" title="Rimuovi dallo storico">✖</button>` : '';
 
             div.innerHTML = `
-                ${deleteBtnHtml}
-                <img src="${poster}" alt="Poster">
+                <img src="${poster}" alt="Poster" onclick="copyTitle('${escapedTitle}')" title="Clicca per copiare il titolo">
                 <div class="list-item-content">
                     <h3>${item.title} ${item.year !== '⏳ Ricerca...' ? `(${item.year})` : ''} ${partialBadge}</h3>
                     <p style="color: ${item.isManual ? '#ffb74d' : '#aaa'}">${(item.genres || []).join(', ')}</p>
                     <p style="font-size:0.8em; margin-top:4px; color:#888;">${item.platforms && item.platforms.length > 0 ? 'Su: ' + item.platforms.join(', ') : item.year}</p>
                 </div>
-                <div class="list-item-rating ${ratingClass}" ${ratingClick} title="${ratingTitle}">
-                    ${item.rating} ⭐
+                <div class="list-item-actions">
+                    <div class="list-item-rating ${ratingClass}" ${ratingClick} title="${ratingTitle}">
+                        ${item.rating} ⭐
+                    </div>
+                    ${deleteBtnHtml}
                 </div>
             `;
             listOutput.appendChild(div);
@@ -473,18 +475,18 @@ function renderList() {
             const idParam = catItem ? catItem.id : null;
 
             div.innerHTML = `
-                <button class="delete-btn" onclick="deleteFromWatchlist('${escapedTitle}')" title="Rimuovi dalla Watchlist">✖</button>
-                <img src="${poster}" alt="Poster" style="align-self: flex-start;">
+                <img src="${poster}" alt="Poster" style="align-self: flex-start;" onclick="copyTitle('${escapedTitle}')" title="Clicca per copiare il titolo">
                 <div class="list-item-content">
                     <h3 style="color: var(--accent-color);">${item.title} ${year !== '⏳' ? `(${year})` : ''}</h3>
                     <p style="color: ${isPending ? '#ffb74d' : '#aaa'}; font-size: 0.8em; margin-bottom: 5px;">${genres}</p>
                     <p style="color: #ddd; font-style: italic; font-size: 0.9em; white-space: normal; line-height: 1.3; flex-grow: 1;">"${item.reason}"</p>
                     ${platforms ? `<p style="font-size:0.8em; margin-top:6px; margin-bottom:4px; color:#888;">Su: ${platforms}</p>` : ''}
                 </div>
-                <div class="list-item-rating" style="min-width: 90px; justify-content: flex-end;">
+                <div class="list-item-actions">
                     <button class="mark-seen-btn" onclick="markWatchlistAsSeen('${escapedTitle}', ${idParam})" title="Clicca qui se hai finalmente visto questo titolo!">
                         L'ho Visto!
                     </button>
+                    <button class="delete-btn" onclick="deleteFromWatchlist('${escapedTitle}')" title="Rimuovi dalla Watchlist">✖</button>
                 </div>
             `;
             listOutput.appendChild(div);
