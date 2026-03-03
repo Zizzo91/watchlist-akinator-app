@@ -158,7 +158,6 @@ async function askManualAdd() {
     const typeLabel = currentTab === 'movies' ? 'del Film' : 'della Serie TV';
     
     if (currentView === 'history') {
-        // Aggiunta Manuale allo Storico
         const title = prompt(`STORICO VOTATI:\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere manualmente:`);
         if (!title || !title.trim()) return;
 
@@ -184,7 +183,6 @@ async function askManualAdd() {
         alert(`"${title.trim()}" inserito in coda con successo!\n\nL'algoritmo andrà a cercare il poster e le info ufficiali su TMDB stanotte.`);
         
     } else {
-        // Aggiunta Manuale alla Watchlist
         const title = prompt(`DA VEDERE (WATCHLIST):\nInserisci il NOME ESATTO ${typeLabel} che vuoi inserire nella tua lista dei desideri:`);
         if (!title || !title.trim()) return;
 
@@ -201,6 +199,81 @@ async function askManualAdd() {
         alert(`"${title.trim()}" inserito nella tua Watchlist!\n\nL'algoritmo andrà a cercare il poster e i dettagli su TMDB stanotte.`);
     }
 }
+
+// === NUOVE FUNZIONI DI CANCELLAZIONE E SPOSTAMENTO ===
+
+async function deleteFromHistory(itemId, title) {
+    if (!confirm(`Sei sicuro di voler ELIMINARE "${title}" dal tuo Storico Votati?\nL'intelligenza artificiale non terrà più conto di questo voto.`)) {
+        return;
+    }
+    
+    delete userData[currentTab].ratings[itemId];
+    // Rimuoviamo anche da "asked" così ti verrà riproposto in futuro nel quiz
+    userData[currentTab].asked = userData[currentTab].asked.filter(id => id !== itemId);
+    
+    renderList();
+    await saveUserData();
+}
+
+async function deleteFromWatchlist(title) {
+    if (!confirm(`Sei sicuro di voler RIMUOVERE "${title}" dalla tua Watchlist?`)) {
+        return;
+    }
+    
+    userData[currentTab].watchlist = userData[currentTab].watchlist.filter(item => item.title !== title);
+    
+    renderList();
+    await saveUserData();
+}
+
+async function markWatchlistAsSeen(title, itemId) {
+    const ratingStr = prompt(`Ottimo! Hai visto "${title}".\nChe voto gli dai? (da 1 a 5)`);
+    if (!ratingStr) return;
+    
+    const rating = parseInt(ratingStr);
+    if (isNaN(rating) || rating < 1 || rating > 5) {
+        alert("Devi inserire un numero tra 1 e 5.");
+        return;
+    }
+
+    let isPartial = false;
+    if(currentTab === 'tv') {
+        const confirmPartial = confirm(`Hai completato la visione di questa serie?\n[OK] = Sì, l'ho finita\n[Annulla] = No, l'ho abbandonata a metà`);
+        isPartial = !confirmPartial; 
+    }
+    
+    // Rimuovi dalla watchlist
+    userData[currentTab].watchlist = userData[currentTab].watchlist.filter(item => item.title !== title);
+    
+    // Se ha l'ID (generato da TMDB o dal Quiz), lo salviamo nei ratings normali
+    if (itemId) {
+        if (!userData[currentTab].ratings) userData[currentTab].ratings = {};
+        userData[currentTab].ratings[itemId] = {
+            rating: rating,
+            seen: true,
+            partial: isPartial,
+            timestamp: new Date().toISOString()
+        };
+        if (!userData[currentTab].asked.includes(itemId)) {
+            userData[currentTab].asked.push(itemId);
+        }
+    } else {
+        // Se NON ha ancora l'ID (aggiunto manualmente e non ancora scansionato dal bot), 
+        // lo spostiamo nella manual_queue dello storico
+        if (!userData[currentTab].manual_queue) userData[currentTab].manual_queue = [];
+        userData[currentTab].manual_queue.push({
+            title: title,
+            rating: rating,
+            addedAt: new Date().toISOString()
+        });
+    }
+
+    renderList();
+    await saveUserData();
+    alert(`"${title}" spostato con successo nello Storico con voto ${rating}⭐!`);
+}
+
+// =======================================================
 
 async function changeRating(itemId) {
     const currentEntry = userData[currentTab].ratings[itemId];
@@ -340,8 +413,12 @@ function renderList() {
             const ratingClick = item.isManual ? '' : `onclick="changeRating(${item.id})"`;
             const ratingClass = item.isManual ? '' : 'editable-rating';
             const ratingTitle = item.isManual ? 'In attesa di scansione...' : 'Clicca per modificare il voto';
+            
+            // Bottone elimina (solo se ha un ID vero, non manuale, per evitare casini di indici)
+            const deleteBtnHtml = !item.isManual ? `<button class="delete-btn" onclick="deleteFromHistory(${item.id}, '${item.title.replace(/'/g, "\\'")}')" title="Rimuovi dallo storico">✖</button>` : '';
 
             div.innerHTML = `
+                ${deleteBtnHtml}
                 <img src="${poster}" alt="Poster">
                 <div class="list-item-content">
                     <h3>${item.title} ${item.year !== '⏳ Ricerca...' ? `(${item.year})` : ''} ${partialBadge}</h3>
@@ -379,7 +456,6 @@ function renderList() {
             const div = document.createElement('div');
             div.className = 'list-item'; 
             
-            // Cerca il titolo nel catalogo (se c'è l'id lo usa, altrimenti usa il titolo)
             let catItem = null;
             if (item.id) {
                 catItem = items.find(i => i.id == item.id);
@@ -393,13 +469,22 @@ function renderList() {
             const genres = catItem && catItem.genres ? catItem.genres.join(', ') : (isPending ? '⏳ In attesa del Server...' : '');
             const platforms = catItem && catItem.platforms ? catItem.platforms.join(', ') : '';
             
+            const escapedTitle = item.title.replace(/'/g, "\\'");
+            const idParam = catItem ? catItem.id : null;
+
             div.innerHTML = `
+                <button class="delete-btn" onclick="deleteFromWatchlist('${escapedTitle}')" title="Rimuovi dalla Watchlist">✖</button>
                 <img src="${poster}" alt="Poster" style="align-self: flex-start;">
                 <div class="list-item-content">
                     <h3 style="color: var(--accent-color);">${item.title} ${year !== '⏳' ? `(${year})` : ''}</h3>
                     <p style="color: ${isPending ? '#ffb74d' : '#aaa'}; font-size: 0.8em; margin-bottom: 5px;">${genres}</p>
-                    <p style="color: #ddd; font-style: italic; font-size: 0.9em; white-space: normal; line-height: 1.3;">"${item.reason}"</p>
-                    ${platforms ? `<p style="font-size:0.8em; margin-top:6px; color:#888;">Su: ${platforms}</p>` : ''}
+                    <p style="color: #ddd; font-style: italic; font-size: 0.9em; white-space: normal; line-height: 1.3; flex-grow: 1;">"${item.reason}"</p>
+                    ${platforms ? `<p style="font-size:0.8em; margin-top:6px; margin-bottom:4px; color:#888;">Su: ${platforms}</p>` : ''}
+                </div>
+                <div class="list-item-rating" style="min-width: 90px; justify-content: flex-end;">
+                    <button class="mark-seen-btn" onclick="markWatchlistAsSeen('${escapedTitle}', ${idParam})" title="Clicca qui se hai finalmente visto questo titolo!">
+                        L'ho Visto!
+                    </button>
                 </div>
             `;
             listOutput.appendChild(div);
