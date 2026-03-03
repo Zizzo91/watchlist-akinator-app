@@ -3,8 +3,8 @@ const DATA_REPO = 'my-watchlist-data';
 let GITHUB_TOKEN = localStorage.getItem('gh_pat');
 
 let catalogData = { movies: [], tv: [] };
-let globalUserData = {}; // Contiene l'intero JSON Multi-Profilo
-let userData = null; // Punta al profilo attivo
+let globalUserData = {};
+let userData = null;
 let currentProfile = localStorage.getItem('active_profile');
 let userdataSha = '';
 let currentTab = 'movies';
@@ -64,7 +64,6 @@ async function loadData() {
         userdataSha = rawContent.sha;
         globalUserData = JSON.parse(b64DecodeUnicode(rawContent.content));
         
-        // Verifica se è ancora nel vecchio formato (dovrebbe già essere stato migrato in app.js, ma sicurezza in più)
         if (!globalUserData[currentProfile]) {
             alert(`Profilo ${currentProfile} non trovato nei dati. Torna alla home per forzare la migrazione.`);
             window.location.href = 'index.html';
@@ -106,10 +105,12 @@ function filterList() {
 }
 
 async function changeRating(itemId) {
-    const currentRating = userData[currentTab].ratings[itemId].rating;
-    const newRatingStr = prompt(`Inserisci il nuovo voto per questo titolo (da 1 a 5):\nAttuale: ${currentRating}`, currentRating);
+    const currentEntry = userData[currentTab].ratings[itemId];
+    const isPartialStr = currentEntry.partial ? " (Attualmente segnato come ABBANDONATO/A METÀ)\n" : "\n";
     
-    if (newRatingStr === null) return;
+    const newRatingStr = prompt(`Inserisci il nuovo voto per questo titolo (da 1 a 5):\nAttuale: ${currentEntry.rating}⭐${isPartialStr}`, currentEntry.rating);
+    
+    if (newRatingStr === null) return; // l'utente ha premuto annulla
     
     const newRating = parseInt(newRatingStr);
     if (isNaN(newRating) || newRating < 1 || newRating > 5) {
@@ -117,9 +118,15 @@ async function changeRating(itemId) {
         return;
     }
 
-    if (newRating === currentRating) return;
+    // Se stiamo modificando la serie, chiediamo anche se è ancora abbandonata o l'ha finita
+    let newPartial = currentEntry.partial || false;
+    if(currentTab === 'tv') {
+        const confirmPartial = confirm(`Hai completato la visione di questa serie?\n[OK] = Sì, l'ho finita\n[Annulla] = No, l'ho abbandonata a metà`);
+        newPartial = !confirmPartial; // se preme OK, partial diventa false. Se Annulla, partial diventa true
+    }
 
     userData[currentTab].ratings[itemId].rating = newRating;
+    userData[currentTab].ratings[itemId].partial = newPartial;
     userData[currentTab].ratings[itemId].timestamp = new Date().toISOString();
     
     renderList();
@@ -127,7 +134,6 @@ async function changeRating(itemId) {
 }
 
 async function saveUserData() {
-    // globalUserData viene salvato, che contiene tutti i profili
     const content = b64EncodeUnicode(JSON.stringify(globalUserData, null, 2));
     try {
         const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
@@ -170,6 +176,7 @@ function renderList() {
                 return {
                     ...catalogItem,
                     rating: ratings[id].rating,
+                    partial: ratings[id].partial,
                     timestamp: ratings[id].timestamp
                 };
             })
@@ -199,10 +206,13 @@ function renderList() {
             div.className = 'list-item';
             const poster = item.poster || 'https://via.placeholder.com/60x90?text=No+Poster';
             
+            // Etichetta "Abbandonata" se salvata come partial
+            const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 6px; border-radius: 4px; border: 1px solid #ff9800; margin-left: 8px; vertical-align: middle;">⏳ A metà</span>` : '';
+            
             div.innerHTML = `
                 <img src="${poster}" alt="${item.title}">
                 <div class="list-item-content">
-                    <h3>${item.title} (${item.year})</h3>
+                    <h3>${item.title} (${item.year}) ${partialBadge}</h3>
                     <p>${(item.genres || []).join(', ')}</p>
                     <p style="font-size:0.8em; margin-top:4px;">Su: ${(item.platforms || []).join(', ')}</p>
                 </div>

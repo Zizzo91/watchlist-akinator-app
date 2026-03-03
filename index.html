@@ -6,7 +6,6 @@
     <title>Watchlist Akinator</title>
     <link rel="stylesheet" href="style.css">
     <script>
-        // Gestione "Magic Link" invisibile all'utente finale
         const urlParams = new URLSearchParams(window.location.search);
         const ghToken = urlParams.get('gh');
         const gemKey = urlParams.get('gem');
@@ -67,6 +66,21 @@
             transform: scale(1.1);
             background: var(--accent-color);
         }
+        
+        .partial-btn {
+            background-color: transparent;
+            color: #ff9800;
+            border: 1px solid #ff9800;
+            margin-top: 15px;
+            padding: 8px 12px;
+            font-size: 0.85em;
+            border-radius: 20px;
+            transition: all 0.2s;
+        }
+        .partial-btn:hover {
+            background-color: rgba(255, 152, 0, 0.1);
+            box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -81,7 +95,6 @@
             <p>Non sei autorizzato a usare questa applicazione. Richiedi un Magic Link di accesso al proprietario.</p>
         </div>
 
-        <!-- Schermata di Login Segreta per l'Admin -->
         <div id="auth-container" class="card" style="display: none; margin-bottom: 30px;">
             <h2 style="margin-top:0;">Login Proprietario</h2>
             <input type="password" id="gh-pat" placeholder="GitHub Personal Access Token">
@@ -89,7 +102,6 @@
             <button onclick="saveTokens()" class="btn-primary">Salva ed Entra</button>
         </div>
 
-        <!-- Schermata Scelta Profilo -->
         <div id="profile-container" style="display: none; text-align: center; margin-bottom: 30px;" class="card">
             <h2>Chi sta guardando?</h2>
             <div class="profiles-wrapper">
@@ -109,7 +121,6 @@
             <p style="font-size: 0.75em; color: var(--text-muted); margin-top: 15px;">Genera un link per configurare un altro telefono senza dover inserire la password.</p>
         </div>
 
-        <!-- Area di Gioco (Akinator) -->
         <div id="game-container" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <span id="current-profile-display" style="font-weight:bold; color:var(--star-color);"></span>
@@ -131,12 +142,17 @@
                     
                     <h3>L'hai già visto? Che voto gli dai?</h3>
                     <div class="stars">
-                        <button onclick="rateItem(1)" title="Pessimo">1</button>
-                        <button onclick="rateItem(2)" title="Scadente">2</button>
-                        <button onclick="rateItem(3)" title="Sufficiente">3</button>
-                        <button onclick="rateItem(4)" title="Bello">4</button>
-                        <button onclick="rateItem(5)" title="Capolavoro">5</button>
+                        <button onclick="rateItem(1, false)" title="Pessimo">1</button>
+                        <button onclick="rateItem(2, false)" title="Scadente">2</button>
+                        <button onclick="rateItem(3, false)" title="Sufficiente">3</button>
+                        <button onclick="rateItem(4, false)" title="Bello">4</button>
+                        <button onclick="rateItem(5, false)" title="Capolavoro">5</button>
                     </div>
+                    
+                    <!-- Nuovo bottone Visto a metà -->
+                    <button onclick="askPartialRating()" class="partial-btn" id="btn-partial" style="display:none;" title="Ho iniziato a vederlo ma l'ho abbandonato o non l'ho finito">
+                        <span style="font-size:1.1em;">⏳</span> L'ho visto solo a metà / Abbandonato
+                    </button>
                     
                     <div class="other-actions">
                         <button onclick="markNotSeen()" class="btn-secondary">Non l'ho visto</button>

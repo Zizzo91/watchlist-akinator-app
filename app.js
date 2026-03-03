@@ -4,8 +4,8 @@ let GITHUB_TOKEN = localStorage.getItem('gh_pat');
 let GEMINI_KEY = localStorage.getItem('gemini_key');
 
 let catalogData = { movies: [], tv: [] };
-let globalUserData = {}; // Contiene i dati di tutti i profili
-let currentUserData = null; // Punta a globalUserData[currentProfile]
+let globalUserData = {}; 
+let currentUserData = null; 
 let currentProfile = localStorage.getItem('active_profile');
 let userdataSha = '';
 let currentTab = 'movies';
@@ -25,7 +25,6 @@ function b64EncodeUnicode(str) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Rileggiamo dal localStorage nel caso in cui il Magic Link li abbia appena settati
     GITHUB_TOKEN = localStorage.getItem('gh_pat');
     GEMINI_KEY = localStorage.getItem('gemini_key');
     currentProfile = localStorage.getItem('active_profile');
@@ -72,7 +71,6 @@ async function loadData() {
         let parsedData = JSON.parse(b64DecodeUnicode(rawContent.content));
 
         if (parsedData.movies && !parsedData.Simone) {
-            console.log("Migrazione dati al formato Multi-Profilo in corso...");
             globalUserData = {
                 "Simone": {
                     movies: parsedData.movies || { ratings: {}, asked: [], watchlist: [] },
@@ -99,7 +97,6 @@ async function loadData() {
         document.getElementById('profile-container').style.display = 'none';
         document.getElementById('game-container').style.display = 'none';
         document.getElementById('error-container').style.display = 'block';
-        // Rimuoviamo i token dal localstorage perché probabilmente sono errati/scaduti
         localStorage.removeItem('gh_pat');
         localStorage.removeItem('gemini_key');
         GITHUB_TOKEN = null;
@@ -149,7 +146,7 @@ function renderNextItem() {
     const unseenItems = items.filter(i => !askedList.includes(i.id));
     
     if (unseenItems.length === 0) {
-        document.getElementById('item-content').innerHTML = "<h2>Hai esaurito il catalogo!</h2><p>Vai su 'Aggiorna TMDB' per aggiungere nuovi titoli.</p>";
+        document.getElementById('item-content').innerHTML = "<h2>Hai esaurito il catalogo!</h2><p>L'aggiornamento automatico porterà presto nuovi titoli.</p>";
         return;
     }
     
@@ -160,18 +157,48 @@ function renderNextItem() {
     const posterSrc = currentItem.poster || 'https://via.placeholder.com/200x300?text=No+Poster';
     document.getElementById('item-poster').src = posterSrc;
     document.getElementById('item-details').innerText = `Generi: ${(currentItem.genres || []).join(', ')} | Su: ${(currentItem.platforms || []).join(', ')}`;
+    
+    // Mostra il pulsante "Visto a metà" solo per le Serie TV
+    const partialBtn = document.getElementById('btn-partial');
+    if(currentTab === 'tv') {
+        partialBtn.style.display = 'inline-block';
+    } else {
+        partialBtn.style.display = 'none';
+    }
 }
 
-async function rateItem(score) {
+// isPartial serve a marcare la serie come abbandonata (false di default)
+async function rateItem(score, isPartial = false) {
     if (!currentItem) return;
     showLoading(true);
     
-    currentUserData[currentTab].ratings[currentItem.id] = { rating: score, seen: true, timestamp: new Date().toISOString() };
+    currentUserData[currentTab].ratings[currentItem.id] = { 
+        rating: score, 
+        seen: true, 
+        partial: isPartial,
+        timestamp: new Date().toISOString() 
+    };
     currentUserData[currentTab].asked.push(currentItem.id);
     
     await saveUserData();
     showLoading(false);
     renderNextItem();
+}
+
+// Funzione dedicata quando l'utente clicca "L'ho visto a metà"
+function askPartialRating() {
+    if (!currentItem) return;
+    const scoreStr = prompt(`Hai iniziato ${currentItem.title} ma non l'hai finito.\n\nFino al punto in cui l'hai visto, che voto gli daresti? (da 1 a 5)`);
+    if (scoreStr === null) return; // annullato
+    
+    const score = parseInt(scoreStr);
+    if (isNaN(score) || score < 1 || score > 5) {
+        alert("Inserisci un numero valido da 1 a 5.");
+        return;
+    }
+    
+    // Salva con flag partial = true
+    rateItem(score, true);
 }
 
 async function markNotSeen() {
@@ -235,11 +262,17 @@ async function askGemini() {
     const items = catalogData[currentTab];
     const watchlist = currentUserData[currentTab].watchlist || [];
     
+    // Distinguiamo anche cosa gli è piaciuto e cosa ha abbandonato
     const positiveItems = Object.keys(ratings)
-        .filter(id => ratings[id].seen && ratings[id].rating >= 4)
+        .filter(id => ratings[id].seen && ratings[id].rating >= 4 && !ratings[id].partial)
         .map(id => items.find(i => i.id == id)?.title)
         .filter(t => t);
         
+    const abandonedItems = Object.keys(ratings)
+        .filter(id => ratings[id].seen && ratings[id].partial)
+        .map(id => items.find(i => i.id == id)?.title)
+        .filter(t => t);
+
     const negativeItems = Object.keys(ratings)
         .filter(id => ratings[id].seen && ratings[id].rating <= 2)
         .map(id => items.find(i => i.id == id)?.title)
@@ -253,15 +286,20 @@ async function askGemini() {
     const watchlistTitles = watchlist.map(w => w.title);
     const doNotSuggest = [...evaluatedTitles, ...watchlistTitles];
         
-    const prompt = `Sei un esperto di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
-L'utente ${currentProfile} ha apprezzato molto: ${positiveItems.join(', ')}.
-Non gli sono piaciuti molto: ${negativeItems.join(', ')}.
-NON suggerire assolutamente questi titoli perché li conosce già o li ha in lista: ${doNotSuggest.join(', ')}.
+    let prompt = `Sei un esperto di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
+L'utente ${currentProfile} ha apprezzato molto e completato: ${positiveItems.join(', ')}.
+Non gli sono piaciuti: ${negativeItems.join(', ')}.
+`;
 
+    if(abandonedItems.length > 0) {
+        prompt += `ATTENZIONE: ha iniziato a guardare queste serie ma le ha ABBANDONATE A METÀ (forse per troppe stagioni, lentezza o calo di qualità): ${abandonedItems.join(', ')}. Evita titoli con strutture simili.\n`;
+    }
+
+    prompt += `NON suggerire assolutamente questi titoli perché li conosce già o li ha in lista: ${doNotSuggest.join(', ')}.
 Suggerisci 3 ${currentTab === 'movies' ? 'film' : 'serie tv'} disponibili in streaming in Italia che potrebbero piacergli moltissimo.
 Rispondi in formato JSON ESATTO con questa struttura:
 [
-  { "title": "Titolo", "year": 2023, "reason": "Breve motivo per cui gli piacerà in base ai suoi gusti" }
+  { "title": "Titolo", "year": 2023, "reason": "Breve motivo per cui gli piacerà in base ai suoi gusti (evita spoiler)" }
 ]
 Solo il JSON valido, niente formattazione markdown.`;
 
