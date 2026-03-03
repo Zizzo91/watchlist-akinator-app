@@ -215,6 +215,34 @@ function skipItem() {
     renderNextItem();
 }
 
+async function addCurrentToWatchlist() {
+    if (!currentItem) return;
+    
+    if(!currentUserData[currentTab].watchlist) currentUserData[currentTab].watchlist = [];
+    
+    const exists = currentUserData[currentTab].watchlist.find(i => i.title === currentItem.title);
+    if(exists) {
+        alert("Questo titolo è già nella tua Watchlist!");
+        return;
+    }
+    
+    showLoading(true);
+    
+    currentUserData[currentTab].watchlist.push({
+        title: currentItem.title,
+        year: currentItem.year,
+        reason: "Aggiunto manualmente durante il quiz perché ispirava.",
+        addedAt: new Date().toISOString()
+    });
+    
+    // Lo segniamo anche come "chiesto" così non te lo ripropone nel quiz
+    currentUserData[currentTab].asked.push(currentItem.id);
+    
+    await saveUserData();
+    showLoading(false);
+    renderNextItem();
+}
+
 async function saveUserData() {
     await forceSaveUserData(`Aggiunta valutazione ${currentTab} per ${currentProfile}`);
 }
@@ -283,8 +311,6 @@ async function askGemini() {
     abandoned.sort((a, b) => b.timestamp - a.timestamp); 
     const topAbandoned = abandoned.slice(0, 15).map(r => `"${r.title}"`);
 
-    // Invia la lista di *TUTTI* i titoli valutati o messi in watchlist a Gemini.
-    // Nessun taglio qui, mandiamo l'elenco completo per garantire che non ti consigli MAI roba già vista o che avevi "saltato"
     const evaluatedTitles = Object.keys(ratingsObj).map(id => {
         const catalogItem = items.find(i => i.id == id);
         return catalogItem ? catalogItem.title : null;
