@@ -6,16 +6,7 @@
     <title>Watchlist Akinator</title>
     <link rel="stylesheet" href="style.css">
     <script>
-        // Gestione "Magic Link" per evitare di far inserire i token a mano agli altri utenti
-        const urlParams = new URLSearchParams(window.location.search);
-        const ghToken = urlParams.get('gh');
-        const gemKey = urlParams.get('gem');
-        if (ghToken && gemKey) {
-            localStorage.setItem('gh_pat', ghToken);
-            localStorage.setItem('gemini_key', gemKey);
-            // Pulisce l'URL in modo che se condivide per sbaglio la pagina, i token non rimangono visibili
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
+        // Token e chiavi rimossi dall'URL e hardcoded nel JS per evitare login manuali.
     </script>
 </head>
 <body>
@@ -25,19 +16,8 @@
     </header>
 
     <main id="app-main">
-        <!-- Schermata di Login Token (nascosta se i token sono già salvati) -->
-        <div id="auth-container" class="card" style="margin-bottom: 30px;">
-            <h2 style="margin-top:0;">Configurazione API</h2>
-            <p style="color:var(--text-muted); font-size:0.9em; margin-bottom:20px;">
-                I token rimangono salvati nel browser.
-            </p>
-            <input type="password" id="gh-pat" placeholder="GitHub Personal Access Token">
-            <input type="password" id="gemini-key" placeholder="Google Gemini API Key">
-            <button onclick="saveTokens()" class="btn-primary">Salva ed Entra</button>
-        </div>
-
         <!-- Schermata Scelta Profilo -->
-        <div id="profile-container" style="display: none; text-align: center; margin-bottom: 30px;" class="card">
+        <div id="profile-container" style="text-align: center; margin-bottom: 30px;" class="card">
             <h2>Chi sta guardando?</h2>
             <div class="profiles-wrapper">
                 <div class="profile-card" onclick="selectProfile('Simone')">
@@ -49,10 +29,6 @@
                     <h3>Michela</h3>
                 </div>
             </div>
-            <p style="margin-top: 25px; font-size: 0.85em; color: var(--text-muted);">
-                Vuoi far accedere Michela senza farle digitare i token?<br>
-                <a href="#" onclick="generateMagicLink()" style="color: var(--accent-color);">Copia il Magic Link</a> e mandaglielo!
-            </p>
         </div>
 
         <!-- Area di Gioco (Akinator) -->
