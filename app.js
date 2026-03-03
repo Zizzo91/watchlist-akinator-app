@@ -24,40 +24,20 @@ function b64EncodeUnicode(str) {
     }));
 }
 
-function generateMagicLink() {
-    if (!GITHUB_TOKEN || !GEMINI_KEY) {
-        alert("Devi prima inserire i token!");
-        return;
-    }
-    const url = new URL(window.location.href);
-    url.searchParams.set('gh', GITHUB_TOKEN);
-    url.searchParams.set('gem', GEMINI_KEY);
-    navigator.clipboard.writeText(url.toString()).then(() => {
-        alert("Magic Link copiato negli appunti!\nInvia questo link a Michela, quando lo aprirà si salveranno i token in automatico senza che debba digitarli.");
-    });
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
+    // Rileggiamo dal localStorage nel caso in cui il Magic Link li abbia appena settati
+    GITHUB_TOKEN = localStorage.getItem('gh_pat');
+    GEMINI_KEY = localStorage.getItem('gemini_key');
+
     if (GITHUB_TOKEN && GEMINI_KEY) {
-        document.getElementById('auth-container').style.display = 'none';
+        document.getElementById('error-container').style.display = 'none';
         await loadData();
     } else {
-        document.getElementById('auth-container').style.display = 'block';
+        document.getElementById('profile-container').style.display = 'none';
+        document.getElementById('game-container').style.display = 'none';
+        document.getElementById('error-container').style.display = 'block';
     }
 });
-
-function saveTokens() {
-    GITHUB_TOKEN = document.getElementById('gh-pat').value.trim();
-    GEMINI_KEY = document.getElementById('gemini-key').value.trim();
-    if (!GITHUB_TOKEN || !GEMINI_KEY) {
-        alert('Inserisci entrambi i token!');
-        return;
-    }
-    localStorage.setItem('gh_pat', GITHUB_TOKEN);
-    localStorage.setItem('gemini_key', GEMINI_KEY);
-    document.getElementById('auth-container').style.display = 'none';
-    loadData();
-}
 
 async function loadData() {
     try {
@@ -76,7 +56,6 @@ async function loadData() {
         userdataSha = rawContent.sha;
         let parsedData = JSON.parse(b64DecodeUnicode(rawContent.content));
 
-        // MIGRATION SCRIPT: Se il file ha il vecchio formato, convertilo al formato Multi-Profilo
         if (parsedData.movies && !parsedData.Simone) {
             console.log("Migrazione dati al formato Multi-Profilo in corso...");
             globalUserData = {
@@ -89,7 +68,6 @@ async function loadData() {
                     tv: { ratings: {}, asked: [], watchlist: [] }
                 }
             };
-            // Salva subito la migrazione
             await forceSaveUserData("Migrazione formato Multi-Profilo");
         } else {
             globalUserData = parsedData;
@@ -103,8 +81,12 @@ async function loadData() {
 
     } catch (err) {
         console.error(err);
-        alert("Errore caricamento dati: " + err.message);
-        document.getElementById('auth-container').style.display = 'block';
+        // Se c'è un errore (es. token revocato o invalido), blocca l'accesso
+        document.getElementById('profile-container').style.display = 'none';
+        document.getElementById('game-container').style.display = 'none';
+        document.getElementById('error-container').style.display = 'block';
+        localStorage.removeItem('gh_pat');
+        localStorage.removeItem('gemini_key');
     }
 }
 
@@ -123,7 +105,6 @@ function startApp(profileName) {
     currentProfile = profileName;
     currentUserData = globalUserData[currentProfile];
     
-    // Inizializza chiavi mancanti per sicurezza
     if(!currentUserData.movies) currentUserData.movies = { ratings:{}, asked:[], watchlist:[] };
     if(!currentUserData.tv) currentUserData.tv = { ratings:{}, asked:[], watchlist:[] };
     if(!currentUserData.movies.watchlist) currentUserData.movies.watchlist = [];
@@ -190,7 +171,6 @@ async function markNotSeen() {
 
 function skipItem() {
     if (!currentItem) return;
-    // Semplicemente lo aggiungiamo ad asked per non riproporlo, ma non lo valutiamo
     currentUserData[currentTab].asked.push(currentItem.id);
     renderNextItem();
 }
@@ -248,7 +228,6 @@ async function askGemini() {
         .map(id => items.find(i => i.id == id)?.title)
         .filter(t => t);
 
-    // Titoli che l'utente ha già in watchlist o ha già valutato, per evitare che Gemini li suggerisca
     const evaluatedTitles = Object.keys(ratings)
         .filter(id => ratings[id].seen)
         .map(id => items.find(i => i.id == id)?.title)
@@ -312,7 +291,6 @@ Solo il JSON valido, niente formattazione markdown.`;
 async function addToWatchlist(title, year, reason) {
     if(!currentUserData[currentTab].watchlist) currentUserData[currentTab].watchlist = [];
     
-    // Controlla che non sia già in lista
     const exists = currentUserData[currentTab].watchlist.find(i => i.title === title);
     if(exists) {
         alert("Questo titolo è già nella tua Watchlist!");

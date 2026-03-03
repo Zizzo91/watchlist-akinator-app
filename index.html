@@ -6,18 +6,47 @@
     <title>Watchlist Akinator</title>
     <link rel="stylesheet" href="style.css">
     <script>
-        // Token e chiavi rimossi dall'URL e hardcoded nel JS per evitare login manuali.
+        // Gestione "Magic Link" invisibile all'utente finale
+        const urlParams = new URLSearchParams(window.location.search);
+        const ghToken = urlParams.get('gh');
+        const gemKey = urlParams.get('gem');
+        if (ghToken && gemKey) {
+            localStorage.setItem('gh_pat', ghToken);
+            localStorage.setItem('gemini_key', gemKey);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+
+        // Funzione nascosta per il creatore dell'app per generare link per gli altri dispositivi
+        function generateMagicLink() {
+            const savedGh = localStorage.getItem('gh_pat');
+            const savedGem = localStorage.getItem('gemini_key');
+            if (!savedGh || !savedGem) {
+                alert("Non hai i token salvati in questo browser per generare un link!");
+                return;
+            }
+            const url = new URL(window.location.href);
+            url.searchParams.set('gh', savedGh);
+            url.searchParams.set('gem', savedGem);
+            navigator.clipboard.writeText(url.toString()).then(() => {
+                alert("Magic Link copiato negli appunti! Invia questo link per autorizzare un altro dispositivo.");
+            });
+        }
     </script>
 </head>
 <body>
     <header>
-        <h1>🎬 Watchlist Akinator</h1>
+        <h1 style="cursor: pointer;" ondblclick="generateMagicLink()" title="Fai doppio clic qui per generare un Magic Link se sei l'admin">🎬 Watchlist Akinator</h1>
         <p>Valuta i titoli che hai visto per ottenere suggerimenti sempre migliori!</p>
     </header>
 
     <main id="app-main">
+        <div id="error-container" class="card" style="display: none; margin-bottom: 30px; border-color: var(--accent-color);">
+            <h2 style="color: var(--accent-color);">Accesso Negato</h2>
+            <p>Non sei autorizzato a usare questa applicazione. Richiedi un Magic Link di accesso al proprietario.</p>
+        </div>
+
         <!-- Schermata Scelta Profilo -->
-        <div id="profile-container" style="text-align: center; margin-bottom: 30px;" class="card">
+        <div id="profile-container" style="display: none; text-align: center; margin-bottom: 30px;" class="card">
             <h2>Chi sta guardando?</h2>
             <div class="profiles-wrapper">
                 <div class="profile-card" onclick="selectProfile('Simone')">
