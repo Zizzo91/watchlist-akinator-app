@@ -234,8 +234,8 @@ Per ogni consiglio, fornisci:
 Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione.`;
 
     try {
-        // Fix per gli IP Europei (Italia): uso v1 stabile al posto di v1beta e gemini-1.5-flash
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_TOKEN}`;
+        // Fix definitivo 2026: Google ha deprecato gli alias base, usiamo il modello specifico gemini-2.5-flash
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_TOKEN}`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -258,7 +258,7 @@ Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione
 
     } catch (err) {
         console.error("Errore Gemini:", err);
-        recsBox.innerHTML = `<p style="color:red;"><strong>Errore API Gemini:</strong> ${err.message}</p> <p>Assicurati che la chiave API sia valida.</p>`;
+        recsBox.innerHTML = `<p style="color:red;"><strong>Errore API Gemini:</strong> ${err.message}</p> <p>Controlla che l'API Key sia corretta cliccando l'ingranaggio in alto a destra.</p>`;
     } finally {
         loadingBox.style.display = 'none';
         recsBox.style.display = 'block';
