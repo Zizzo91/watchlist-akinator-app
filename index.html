@@ -5,7 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Watchlist Akinator</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
     <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('ServiceWorker registrato con successo.', reg);
+                }).catch(err => {
+                    console.log('ServiceWorker fallito: ', err);
+                });
+            });
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const ghToken = urlParams.get('gh');
         const gemKey = urlParams.get('gem');
@@ -82,25 +93,26 @@
             box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
         }
 
-        /* Nuovi stili per la Action Bar Moderna */
         .quick-actions {
             display: flex;
-            gap: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
             margin: 15px 0 25px 0;
             justify-content: center;
         }
         .quick-btn {
             flex: 1;
+            min-width: 140px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             background: var(--card-bg);
             color: #fff;
             border: 1px solid #444;
             border-radius: 12px;
-            padding: 12px 10px;
-            font-size: 0.95em;
+            padding: 10px;
+            font-size: 0.9em;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
@@ -118,6 +130,14 @@
         .quick-btn.gemini-btn:hover {
             background: linear-gradient(135deg, rgba(138, 43, 226, 0.3) 0%, rgba(75, 0, 130, 0.3) 100%);
             box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+        }
+        .quick-btn.couple-btn {
+            background: linear-gradient(135deg, rgba(255, 65, 108, 0.2) 0%, rgba(255, 75, 43, 0.2) 100%);
+            border-color: #ff416c;
+        }
+        .quick-btn.couple-btn:hover {
+            background: linear-gradient(135deg, rgba(255, 65, 108, 0.4) 0%, rgba(255, 75, 43, 0.4) 100%);
+            box-shadow: 0 4px 15px rgba(255, 65, 108, 0.4);
         }
         
         .gemini-card {
@@ -183,20 +203,15 @@
                 <button onclick="setTab('tv')" id="btn-tv">Serie TV</button>
             </nav>
 
-            <!-- NUOVA ACTION BAR -->
             <div class="quick-actions">
-                <button onclick="window.location.href='list.html'" class="quick-btn">
-                    <span style="font-size: 1.2em;">📋</span> Le Mie Liste
-                </button>
-                <button onclick="askGemini()" class="quick-btn gemini-btn">
-                    <span style="font-size: 1.2em;">✨</span> Consigli IA
-                </button>
+                <button onclick="window.location.href='list.html'" class="quick-btn">📋 Le Mie Liste</button>
+                <button onclick="window.location.href='stats.html'" class="quick-btn">📊 Statistiche</button>
+                <button onclick="askGemini()" class="quick-btn gemini-btn">✨ Consigli IA</button>
+                <button onclick="askGeminiCouple()" class="quick-btn couple-btn">👩‍❤️‍👨 Match Coppia</button>
             </div>
 
-            <!-- CARD GEMINI -->
             <div id="gemini-output" class="card gemini-card" style="display: none;"></div>
 
-            <!-- CARD QUIZ -->
             <div id="item-card" class="card">
                 <div id="loading" style="display: none;">Caricamento in corso...</div>
                 
@@ -205,7 +220,9 @@
                     <h2 id="item-title"></h2>
                     <p id="item-details" class="details"></p>
                     
-                    <h3>L'hai già visto? Che voto gli dai?</h3>
+                    <button id="btn-trailer" class="btn-tertiary" style="width: auto; padding: 5px 15px; font-size: 0.8em; border-color: #555; margin-bottom: 15px;">▶️ Guarda Trailer</button>
+                    
+                    <h3 style="margin-top: 5px;">L'hai già visto? Che voto gli dai?</h3>
                     <div class="stars">
                         <button onclick="rateItem(1, false)" title="Pessimo">1</button>
                         <button onclick="rateItem(2, false)" title="Scadente">2</button>

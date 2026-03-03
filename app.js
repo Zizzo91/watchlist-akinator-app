@@ -59,7 +59,7 @@ async function loadData() {
             headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
             cache: 'no-store'
         });
-        if (!catalogRes.ok) throw new Error("Errore nel caricamento del catalogo. Token invalido?");
+        if (!catalogRes.ok) throw new Error("Errore nel caricamento del catalogo.");
         catalogData = JSON.parse(b64DecodeUnicode((await catalogRes.json()).content));
 
         const userRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
@@ -72,14 +72,8 @@ async function loadData() {
 
         if (parsedData.movies && !parsedData.Simone) {
             globalUserData = {
-                "Simone": {
-                    movies: parsedData.movies || { ratings: {}, asked: [], watchlist: [] },
-                    tv: parsedData.tv || { ratings: {}, asked: [], watchlist: [] }
-                },
-                "Michela": {
-                    movies: { ratings: {}, asked: [], watchlist: [] },
-                    tv: { ratings: {}, asked: [], watchlist: [] }
-                }
+                "Simone": { movies: parsedData.movies || { ratings: {}, asked: [], watchlist: [] }, tv: parsedData.tv || { ratings: {}, asked: [], watchlist: [] } },
+                "Michela": { movies: { ratings: {}, asked: [], watchlist: [] }, tv: { ratings: {}, asked: [], watchlist: [] } }
             };
             await forceSaveUserData("Migrazione formato Multi-Profilo");
         } else {
@@ -97,10 +91,6 @@ async function loadData() {
         document.getElementById('profile-container').style.display = 'none';
         document.getElementById('game-container').style.display = 'none';
         document.getElementById('error-container').style.display = 'block';
-        localStorage.removeItem('gh_pat');
-        localStorage.removeItem('gemini_key');
-        GITHUB_TOKEN = null;
-        GEMINI_KEY = null;
     }
 }
 
@@ -158,26 +148,22 @@ function renderNextItem() {
     document.getElementById('item-poster').src = posterSrc;
     document.getElementById('item-details').innerText = `Generi: ${(currentItem.genres || []).join(', ')} | Su: ${(currentItem.platforms || []).join(', ')}`;
     
+    // Tasto Trailer
+    const btnTrailer = document.getElementById('btn-trailer');
+    btnTrailer.onclick = () => {
+        const query = encodeURIComponent(`${currentItem.title} ${currentItem.year} trailer ita`);
+        window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
+    };
+
     const partialBtn = document.getElementById('btn-partial');
-    if(currentTab === 'tv') {
-        partialBtn.style.display = 'inline-block';
-    } else {
-        partialBtn.style.display = 'none';
-    }
+    partialBtn.style.display = currentTab === 'tv' ? 'inline-block' : 'none';
 }
 
 async function rateItem(score, isPartial = false) {
     if (!currentItem) return;
     showLoading(true);
-    
-    currentUserData[currentTab].ratings[currentItem.id] = { 
-        rating: score, 
-        seen: true, 
-        partial: isPartial,
-        timestamp: new Date().toISOString() 
-    };
+    currentUserData[currentTab].ratings[currentItem.id] = { rating: score, seen: true, partial: isPartial, timestamp: new Date().toISOString() };
     currentUserData[currentTab].asked.push(currentItem.id);
-    
     await saveUserData();
     showLoading(false);
     renderNextItem();
@@ -187,23 +173,16 @@ function askPartialRating() {
     if (!currentItem) return;
     const scoreStr = prompt(`Hai iniziato ${currentItem.title} ma non l'hai finito.\n\nFino al punto in cui l'hai visto, che voto gli daresti? (da 1 a 5)`);
     if (scoreStr === null) return; 
-    
     const score = parseInt(scoreStr);
-    if (isNaN(score) || score < 1 || score > 5) {
-        alert("Inserisci un numero valido da 1 a 5.");
-        return;
-    }
-    
+    if (isNaN(score) || score < 1 || score > 5) return alert("Inserisci un numero valido da 1 a 5.");
     rateItem(score, true);
 }
 
 async function markNotSeen() {
     if (!currentItem) return;
     showLoading(true);
-    
     currentUserData[currentTab].ratings[currentItem.id] = { seen: false, timestamp: new Date().toISOString() };
     currentUserData[currentTab].asked.push(currentItem.id);
-    
     await saveUserData();
     showLoading(false);
     renderNextItem();
@@ -217,34 +196,23 @@ function skipItem() {
 
 async function addCurrentToWatchlist() {
     if (!currentItem) return;
-    
     if(!currentUserData[currentTab].watchlist) currentUserData[currentTab].watchlist = [];
-    
-    const exists = currentUserData[currentTab].watchlist.find(i => i.title === currentItem.title);
-    if(exists) {
-        alert("Questo titolo è già nella tua Watchlist!");
-        return;
+    if(currentUserData[currentTab].watchlist.find(i => i.title.toLowerCase() === currentItem.title.toLowerCase())) {
+        return alert("Questo titolo è già nella tua Watchlist!");
     }
-    
     showLoading(true);
-    
     currentUserData[currentTab].watchlist.push({
-        id: currentItem.id, 
-        title: currentItem.title,
-        year: currentItem.year,
-        reason: "Aggiunto manualmente durante il quiz perché ispirava.",
-        addedAt: new Date().toISOString()
+        id: currentItem.id, title: currentItem.title, year: currentItem.year,
+        reason: "Aggiunto manualmente durante il quiz.", addedAt: new Date().toISOString()
     });
-    
     currentUserData[currentTab].asked.push(currentItem.id);
-    
     await saveUserData();
     showLoading(false);
     renderNextItem();
 }
 
 async function saveUserData() {
-    await forceSaveUserData(`Aggiunta valutazione ${currentTab} per ${currentProfile}`);
+    await forceSaveUserData(`Update per ${currentProfile}`);
 }
 
 async function forceSaveUserData(commitMessage) {
@@ -252,24 +220,13 @@ async function forceSaveUserData(commitMessage) {
     try {
         const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${GITHUB_TOKEN}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: commitMessage,
-                content: content,
-                sha: userdataSha
-            })
+            headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: commitMessage, content: content, sha: userdataSha })
         });
-        
-        if (!response.ok) throw new Error('Errore nel salvataggio su GitHub');
-        const data = await response.json();
-        userdataSha = data.content.sha;
+        if (!response.ok) throw new Error('Errore salvataggio GitHub');
+        userdataSha = (await response.json()).content.sha;
     } catch (err) {
-        console.error("Salvataggio fallito:", err);
-        alert("Si è verificato un errore nel salvataggio dei dati su GitHub.");
+        console.error(err);
     }
 }
 
@@ -287,100 +244,34 @@ function shuffleArray(array) {
     return arr;
 }
 
-async function askGemini() {
+async function fetchGeminiRecommendations(promptStr, titleColor = '#b16eff', titleText = '✨ I Consigli di Gemini') {
     document.getElementById('gemini-output').style.display = 'block';
     document.getElementById('gemini-output').innerHTML = `
         <div style="text-align:center; padding: 20px;">
             <div style="font-size: 2.5em; margin-bottom: 15px; animation: pulse 1.5s infinite;">🤖</div>
-            <em style="color: var(--text-muted);">Gemini sta analizzando il tuo profilo e cercando i titoli perfetti...</em>
+            <em style="color: var(--text-muted);">Elaborazione in corso...</em>
         </div>
     `;
-    
-    const ratingsObj = currentUserData[currentTab].ratings;
-    const items = catalogData[currentTab];
-    const watchlist = currentUserData[currentTab].watchlist || [];
-    
-    const allRatings = Object.keys(ratingsObj)
-        .filter(id => ratingsObj[id].seen)
-        .map(id => {
-            const catalogItem = items.find(i => i.id == id);
-            return {
-                title: catalogItem ? catalogItem.title : `ID:${id}`,
-                genres: catalogItem ? (catalogItem.genres || []).join(', ') : '',
-                rating: ratingsObj[id].rating,
-                partial: ratingsObj[id].partial
-            };
-        });
-
-    let positives = allRatings.filter(r => r.rating >= 4 && !r.partial);
-    positives = shuffleArray(positives);
-    const topPositives = positives.slice(0, 30).map(r => `"${r.title}" (Genere: ${r.genres})`);
-
-    let negatives = allRatings.filter(r => r.rating <= 2 && !r.partial);
-    negatives = shuffleArray(negatives);
-    const topNegatives = negatives.slice(0, 15).map(r => `"${r.title}"`);
-
-    let abandoned = allRatings.filter(r => r.partial);
-    abandoned = shuffleArray(abandoned);
-    const topAbandoned = abandoned.slice(0, 10).map(r => `"${r.title}"`);
-
-    const evaluatedTitles = Object.keys(ratingsObj).map(id => {
-        const catalogItem = items.find(i => i.id == id);
-        return catalogItem ? catalogItem.title : null;
-    }).filter(t => t);
-    
-    const watchlistTitles = watchlist.map(w => w.title);
-    const doNotSuggest = [...new Set([...evaluatedTitles, ...watchlistTitles])];
-    
-    const numSuggestions = currentTab === 'movies' ? 10 : 5;
-        
-    let prompt = `Agisci come un esperto sommelier di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
-Devi consigliare ${numSuggestions} ${currentTab === 'movies' ? 'film' : 'serie tv'} al profilo utente "${currentProfile}".
-
-ECCO UN CAMPIONE CASUALE DEI SUOI GUSTI RECENTI E PASSATI:
-Ha AMATO questi titoli: ${topPositives.join(', ')}.
-Non gli sono per niente piaciuti: ${topNegatives.join(', ')}.
-`;
-
-    if(topAbandoned.length > 0) {
-        prompt += `ATTENZIONE: ha INIZIATO MA ABBANDONATO a metà questi titoli (ritmo troppo lento? calo qualità?): ${topAbandoned.join(', ')}. Evita strutture simili.\n`;
-    }
-
-    prompt += `
-REGOLE RIGIDE:
-1. DIVIETO ASSOLUTO DI SUGGERIRE I SEGUENTI TITOLI perché li ha già visti o li ha già messi nella sua coda "Da Vedere": ${JSON.stringify(doNotSuggest)}. Se suggerisci uno di questi titoli, fallirai il compito.
-2. I titoli devono essere veri, esistenti e disponibili sulle principali piattaforme streaming italiane (Netflix, Prime, Disney, NowTV).
-3. Sii vario. Tra i ${numSuggestions} titoli, inserisci grandi classici famosissimi, titoli medi, e qualche chicca nascosta (hidden gem).
-
-Rispondi in formato JSON ESATTO con questa struttura:
-[
-  { "title": "Nome Esatto", "year": 2023, "reason": "1 riga molto convincente su perché si adatta perfettamente al suo profilo, citando in modo colloquiale i film che ha amato" }
-]
-Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.`;
 
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { 
-                    temperature: 0.9, 
-                    topK: 40 
-                }
+                contents: [{ parts: [{ text: promptStr }] }],
+                generationConfig: { temperature: 0.9, topK: 40 }
             })
         });
 
         const data = await res.json();
         let text = data.candidates[0].content.parts[0].text;
-        
         text = text.replace(/```json/g, '').replace(/```/g, '').trim();
         const suggestions = JSON.parse(text);
         
         let html = `
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(138,43,226,0.3); padding-bottom:10px; margin-bottom:15px;">
-                <h3 style="margin:0; color:#b16eff;">✨ I Consigli di Gemini</h3>
-                <button onclick="document.getElementById('gemini-output').style.display='none'" style="background:none; border:none; color:#aaa; font-size:1.5em; cursor:pointer; padding:0; line-height:1;" title="Chiudi">&times;</button>
+                <h3 style="margin:0; color:${titleColor};">${titleText}</h3>
+                <button onclick="document.getElementById('gemini-output').style.display='none'" style="background:none; border:none; color:#aaa; font-size:1.5em; cursor:pointer; padding:0; line-height:1;">&times;</button>
             </div>
             <ul style='padding-left: 20px; margin:0;'>
         `;
@@ -391,10 +282,12 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
                 <li style="margin-bottom: 15px;">
                     <strong style="color:var(--accent-color); font-size:1.1em;">${s.title} (${s.year})</strong><br>
                     <span style="font-size:0.9em; color:#ddd;">${s.reason}</span><br>
-                    <button class="btn-primary" style="background-color: var(--success-color); padding: 5px 10px; margin-top: 8px; font-size: 0.8em; width: auto;" 
-                            onclick="addToWatchlist('${escapedTitle}', ${s.year}, '${escapedReason}')">
-                        + Salva in Watchlist
-                    </button>
+                    <div style="display: flex; gap: 10px; margin-top: 8px;">
+                        <button class="btn-primary" style="background-color: var(--success-color); padding: 5px 10px; font-size: 0.8em; width: auto;" 
+                                onclick="addToWatchlist('${escapedTitle}', ${s.year}, '${escapedReason}')">+ Salva in Watchlist</button>
+                        <button class="btn-tertiary" style="padding: 5px 10px; font-size: 0.8em; width: auto; border-color: #555;" 
+                                onclick="window.open('https://www.youtube.com/results?search_query=${encodeURIComponent(s.title + ' ' + s.year + ' trailer ita')}', '_blank')">▶️ Trailer</button>
+                    </div>
                 </li>
             `;
         });
@@ -405,30 +298,86 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
         console.error(err);
         document.getElementById('gemini-output').innerHTML = `
             <div style='padding:20px; text-align:center;'>
-                <em style='color:#ff5252;'>Errore nella generazione con Gemini. Controlla la tua API Key o riprova tra poco.</em>
-                <br><br>
+                <em style='color:#ff5252;'>Errore. Controlla la tua API Key o riprova tra poco.</em><br><br>
                 <button onclick="document.getElementById('gemini-output').style.display='none'" class="btn-secondary" style="width: auto; padding: 5px 15px;">Chiudi</button>
             </div>
         `;
     }
 }
 
+function askGemini() {
+    const ratingsObj = currentUserData[currentTab].ratings;
+    const allRatings = Object.keys(ratingsObj).filter(id => ratingsObj[id].seen).map(id => {
+        const cat = catalogData[currentTab].find(i => i.id == id);
+        return { title: cat ? cat.title : '', genres: cat ? (cat.genres || []).join(', ') : '', rating: ratingsObj[id].rating, partial: ratingsObj[id].partial };
+    });
+
+    let pos = shuffleArray(allRatings.filter(r => r.rating >= 4 && !r.partial)).slice(0, 30).map(r => `"${r.title}" (${r.genres})`);
+    let neg = shuffleArray(allRatings.filter(r => r.rating <= 2 && !r.partial)).slice(0, 15).map(r => `"${r.title}"`);
+    let abn = shuffleArray(allRatings.filter(r => r.partial)).slice(0, 10).map(r => `"${r.title}"`);
+
+    const doNotSuggest = [...new Set([...allRatings.map(r=>r.title), ...(currentUserData[currentTab].watchlist || []).map(w=>w.title)])].filter(Boolean);
+    const num = currentTab === 'movies' ? 10 : 5;
+    const typeStr = currentTab === 'movies' ? 'film' : 'serie tv';
+
+    let prompt = `Agisci come esperto di ${typeStr}. Consiglia ${num} ${typeStr} all'utente.
+AMATI: ${pos.join(', ')}.
+ODIATI: ${neg.join(', ')}.
+${abn.length > 0 ? `ABBANDONATI: ${abn.join(', ')}.\n` : ''}
+DIVIETO ASSOLUTO SU: ${JSON.stringify(doNotSuggest)}.
+Requisiti: disponibili in Italia (Netflix, Prime, Disney, NowTV). Sii vario.
+Rispondi in JSON: [{"title": "Nome", "year": 2023, "reason": "Motivo..."}] (senza markdown o testo extra).`;
+
+    fetchGeminiRecommendations(prompt);
+}
+
+function askGeminiCouple() {
+    const profA = globalUserData['Simone'] || { movies:{ratings:{}, watchlist:[]}, tv:{ratings:{}, watchlist:[]} };
+    const profB = globalUserData['Michela'] || { movies:{ratings:{}, watchlist:[]}, tv:{ratings:{}, watchlist:[]} };
+
+    const getPositives = (prof) => {
+        const rObj = prof[currentTab].ratings;
+        return Object.keys(rObj).filter(id => rObj[id].seen && rObj[id].rating >= 4 && !rObj[id].partial).map(id => {
+            const cat = catalogData[currentTab].find(i => i.id == id);
+            return cat ? `"${cat.title}"` : null;
+        }).filter(Boolean);
+    };
+
+    const getSeenOrWatchlist = (prof) => {
+        const rObj = prof[currentTab].ratings;
+        const seen = Object.keys(rObj).filter(id => rObj[id].seen).map(id => {
+            const cat = catalogData[currentTab].find(i => i.id == id);
+            return cat ? cat.title : null;
+        });
+        const wl = (prof[currentTab].watchlist || []).map(w => w.title);
+        return [...seen, ...wl].filter(Boolean);
+    };
+
+    let posA = shuffleArray(getPositives(profA)).slice(0, 20);
+    let posB = shuffleArray(getPositives(profB)).slice(0, 20);
+    const doNotSuggest = [...new Set([...getSeenOrWatchlist(profA), ...getSeenOrWatchlist(profB)])];
+    
+    const num = currentTab === 'movies' ? 5 : 4;
+    const typeStr = currentTab === 'movies' ? 'film' : 'serie tv';
+
+    let prompt = `Agisci come consulente di coppia per ${typeStr}. Trova ${num} titoli che mettano d'accordo Simone e Michela per la serata.
+SIMONE AMA: ${posA.join(', ')}.
+MICHELA AMA: ${posB.join(', ')}.
+DIVIETO ASSOLUTO SU (già visti da almeno uno dei due o in lista): ${JSON.stringify(doNotSuggest)}.
+Cerca compromessi perfetti o titoli che fondono i loro gusti. Disponibili in Italia.
+Rispondi in JSON puro: [{"title": "Nome", "year": 2023, "reason": "Motivo..."}]`;
+
+    fetchGeminiRecommendations(prompt, '#ff416c', '👩‍❤️‍👨 Match di Coppia: Consigliati per entrambi');
+}
+
 async function addToWatchlist(title, year, reason) {
     if(!currentUserData[currentTab].watchlist) currentUserData[currentTab].watchlist = [];
-    
-    const exists = currentUserData[currentTab].watchlist.find(i => i.title.toLowerCase() === title.toLowerCase());
-    if(exists) {
-        alert("Questo titolo è già nella tua Watchlist!");
-        return;
+    if(currentUserData[currentTab].watchlist.find(i => i.title.toLowerCase() === title.toLowerCase())) {
+        return alert("Questo titolo è già nella tua Watchlist!");
     }
-    
     currentUserData[currentTab].watchlist.push({
-        title: title,
-        year: year,
-        reason: reason,
-        addedAt: new Date().toISOString()
+        title: title, year: year, reason: reason, addedAt: new Date().toISOString()
     });
-    
     await saveUserData();
     alert(`"${title}" aggiunto alla Watchlist di ${currentProfile}!`);
 }
