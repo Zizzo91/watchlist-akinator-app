@@ -229,7 +229,7 @@ async function addCurrentToWatchlist() {
     showLoading(true);
     
     currentUserData[currentTab].watchlist.push({
-        id: currentItem.id, // ID aggiunto qui! Così nel rendering ha già il poster subito
+        id: currentItem.id, 
         title: currentItem.title,
         year: currentItem.year,
         reason: "Aggiunto manualmente durante il quiz perché ispirava.",
@@ -278,6 +278,15 @@ function showLoading(show) {
     document.getElementById('item-content').style.opacity = show ? '0.3' : '1';
 }
 
+function shuffleArray(array) {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
 async function askGemini() {
     document.getElementById('gemini-output').style.display = 'block';
     document.getElementById('gemini-output').innerHTML = "<em>L'Intelligenza Artificiale sta analizzando i tuoi gusti e cercando i titoli...</em>";
@@ -294,37 +303,39 @@ async function askGemini() {
                 title: catalogItem ? catalogItem.title : `ID:${id}`,
                 genres: catalogItem ? (catalogItem.genres || []).join(', ') : '',
                 rating: ratingsObj[id].rating,
-                partial: ratingsObj[id].partial,
-                timestamp: new Date(ratingsObj[id].timestamp || 0).getTime()
+                partial: ratingsObj[id].partial
             };
         });
 
+    // Filtriamo e RANDOMIZZIAMO il campione per Gemini
     let positives = allRatings.filter(r => r.rating >= 4 && !r.partial);
-    positives.sort((a, b) => b.rating - a.rating || b.timestamp - a.timestamp);
-    const topPositives = positives.slice(0, 40).map(r => `"${r.title}" (Genere: ${r.genres})`);
+    positives = shuffleArray(positives);
+    const topPositives = positives.slice(0, 30).map(r => `"${r.title}" (Genere: ${r.genres})`);
 
     let negatives = allRatings.filter(r => r.rating <= 2 && !r.partial);
-    negatives.sort((a, b) => a.rating - b.rating || b.timestamp - a.timestamp);
-    const topNegatives = negatives.slice(0, 20).map(r => `"${r.title}"`);
+    negatives = shuffleArray(negatives);
+    const topNegatives = negatives.slice(0, 15).map(r => `"${r.title}"`);
 
     let abandoned = allRatings.filter(r => r.partial);
-    abandoned.sort((a, b) => b.timestamp - a.timestamp); 
-    const topAbandoned = abandoned.slice(0, 15).map(r => `"${r.title}"`);
+    abandoned = shuffleArray(abandoned);
+    const topAbandoned = abandoned.slice(0, 10).map(r => `"${r.title}"`);
 
+    // Calcolo rigoroso dei titoli DA NON SUGGERIRE (Storico + Watchlist)
     const evaluatedTitles = Object.keys(ratingsObj).map(id => {
         const catalogItem = items.find(i => i.id == id);
         return catalogItem ? catalogItem.title : null;
     }).filter(t => t);
     
     const watchlistTitles = watchlist.map(w => w.title);
-    const doNotSuggest = [...evaluatedTitles, ...watchlistTitles];
+    // Uniamo e rimuoviamo eventuali duplicati
+    const doNotSuggest = [...new Set([...evaluatedTitles, ...watchlistTitles])];
     
     const numSuggestions = currentTab === 'movies' ? 10 : 5;
         
     let prompt = `Agisci come un esperto sommelier di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
 Devi consigliare ${numSuggestions} ${currentTab === 'movies' ? 'film' : 'serie tv'} al profilo utente "${currentProfile}".
 
-ECCO IL SUO PROFILO DINAMICO:
+ECCO UN CAMPIONE CASUALE DEI SUOI GUSTI RECENTI E PASSATI:
 Ha AMATO questi titoli: ${topPositives.join(', ')}.
 Non gli sono per niente piaciuti: ${topNegatives.join(', ')}.
 `;
@@ -335,7 +346,7 @@ Non gli sono per niente piaciuti: ${topNegatives.join(', ')}.
 
     prompt += `
 REGOLE RIGIDE:
-1. NON suggerire assolutamente NESSUN titolo presente in questa lista perché li ha GIA' VISTI TUTTI o sono in coda: ${JSON.stringify(doNotSuggest)}.
+1. DIVIETO ASSOLUTO DI SUGGERIRE I SEGUENTI TITOLI perché li ha già visti o li ha già messi nella sua coda "Da Vedere": ${JSON.stringify(doNotSuggest)}. Se suggerisci uno di questi titoli, fallirai il compito.
 2. I titoli devono essere veri, esistenti e disponibili sulle principali piattaforme streaming italiane (Netflix, Prime, Disney, NowTV).
 3. Sii vario. Tra i ${numSuggestions} titoli, inserisci grandi classici famosissimi, titoli medi, e qualche chicca nascosta (hidden gem).
 
@@ -352,7 +363,7 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
-                    temperature: 0.8,
+                    temperature: 0.9, // Aumentata leggermente per favorire risultati più creativi e vari
                     topK: 40 
                 }
             })
@@ -391,7 +402,7 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
 async function addToWatchlist(title, year, reason) {
     if(!currentUserData[currentTab].watchlist) currentUserData[currentTab].watchlist = [];
     
-    const exists = currentUserData[currentTab].watchlist.find(i => i.title === title);
+    const exists = currentUserData[currentTab].watchlist.find(i => i.title.toLowerCase() === title.toLowerCase());
     if(exists) {
         alert("Questo titolo è già nella tua Watchlist!");
         return;
