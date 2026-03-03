@@ -9,7 +9,12 @@ let currentProfile = localStorage.getItem('active_profile');
 let userdataSha = '';
 let currentTab = 'movies';
 let currentView = 'history';
+
+// Variabili per i filtri
 let searchQuery = '';
+let filterGenre = '';
+let filterPlatform = '';
+let filterRating = '';
 
 function b64DecodeUnicode(str) {
     return decodeURIComponent(atob(str).split('').map(function(c) {
@@ -40,7 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     document.getElementById('app-nav').style.display = 'flex';
     document.getElementById('view-toggle').style.display = 'flex';
-    document.getElementById('search-container').style.display = 'block';
+    document.getElementById('search-container').style.display = 'flex';
     document.getElementById('app-main').style.display = 'flex';
     await loadData();
 });
@@ -77,6 +82,7 @@ async function loadData() {
         if(!userData.movies.manual_queue) userData.movies.manual_queue = [];
         if(!userData.tv.manual_queue) userData.tv.manual_queue = [];
         
+        populateGenreDropdown();
         renderList();
 
     } catch (err) {
@@ -87,22 +93,69 @@ async function loadData() {
     }
 }
 
+// Popola la tendina dei generi in base ai titoli che l'utente ha effettivamente valutato
+function populateGenreDropdown() {
+    const ratings = userData[currentTab]?.ratings || {};
+    const items = catalogData[currentTab] || [];
+    
+    const uniqueGenres = new Set();
+    
+    Object.keys(ratings).forEach(id => {
+        if (ratings[id].seen) {
+            const catalogItem = items.find(i => i.id == id);
+            if (catalogItem && catalogItem.genres) {
+                catalogItem.genres.forEach(g => uniqueGenres.add(g));
+            }
+        }
+    });
+
+    const genreSelect = document.getElementById('filter-genre');
+    // Mantiene la prima opzione "Tutti i Generi" e cancella il resto
+    genreSelect.innerHTML = '<option value="">Tutti i Generi</option>';
+    
+    // Inserisce i generi in ordine alfabetico
+    Array.from(uniqueGenres).sort().forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.innerText = g;
+        genreSelect.appendChild(opt);
+    });
+}
+
 function setTab(tab) {
     currentTab = tab;
     document.getElementById('btn-movies').classList.toggle('active', tab === 'movies');
     document.getElementById('btn-tv').classList.toggle('active', tab === 'tv');
-    renderList();
+    
+    // Reset filtri al cambio tab
+    document.getElementById('search-input').value = '';
+    document.getElementById('filter-genre').value = '';
+    document.getElementById('filter-platform').value = '';
+    document.getElementById('filter-rating').value = '';
+    filterList(); // Questo chiamerà renderList() con valori vuoti
+    populateGenreDropdown();
 }
 
 function setView(view) {
     currentView = view;
     document.getElementById('btn-history').classList.toggle('active', view === 'history');
     document.getElementById('btn-watchlist').classList.toggle('active', view === 'watchlist');
+    
+    // Nascondi i filtri avanzati se siamo in watchlist
+    if(view === 'watchlist') {
+        document.getElementById('filters-row').style.display = 'none';
+    } else {
+        document.getElementById('filters-row').style.display = 'flex';
+    }
+    
     renderList();
 }
 
 function filterList() {
     searchQuery = document.getElementById('search-input').value.toLowerCase();
+    filterGenre = document.getElementById('filter-genre').value;
+    filterPlatform = document.getElementById('filter-platform').value;
+    filterRating = document.getElementById('filter-rating').value;
     renderList();
 }
 
@@ -130,7 +183,7 @@ async function askManualAdd() {
         addedAt: new Date().toISOString()
     });
 
-    renderList(); // Aggiorna subito la UI visivamente
+    renderList(); 
     await saveUserData();
     
     alert(`"${title.trim()}" inserito in coda con successo!\n\nL'algoritmo andrà a cercare il poster e le info ufficiali su TMDB stanotte e domani lo vedrai completato nella tua lista.`);
@@ -200,7 +253,6 @@ function renderList() {
         const ratings = userData[currentTab]?.ratings || {};
         const items = catalogData[currentTab] || [];
         
-        // Elementi votati e validati (con ID TMDB)
         let ratedItems = Object.keys(ratings)
             .filter(id => ratings[id].seen === true)
             .map(id => {
@@ -213,11 +265,10 @@ function renderList() {
                     timestamp: ratings[id].timestamp
                 };
             })
-            .filter(i => i.title); // rimuove quelli non trovati nel catalogo
+            .filter(i => i.title); 
             
-        // Elementi in coda aggiunti manualmente ma non ancora scansionati
         let manualItems = (userData[currentTab]?.manual_queue || []).map(item => ({
-            id: 'manual', // finto ID
+            id: 'manual', 
             title: item.title,
             year: '⏳ Ricerca...',
             genres: ['In attesa del Server'],
@@ -228,24 +279,39 @@ function renderList() {
             timestamp: item.addedAt
         }));
 
+        // APPLICAZIONE DEI FILTRI (AND Logico)
         if (searchQuery) {
-            ratedItems = ratedItems.filter(item => 
-                item.title.toLowerCase().includes(searchQuery) ||
-                (item.genres && item.genres.some(g => g.toLowerCase().includes(searchQuery))) ||
-                (item.platforms && item.platforms.some(p => p.toLowerCase().includes(searchQuery))) ||
-                (item.year && item.year.toString().includes(searchQuery))
-            );
+            ratedItems = ratedItems.filter(item => item.title.toLowerCase().includes(searchQuery));
             manualItems = manualItems.filter(item => item.title.toLowerCase().includes(searchQuery));
+        }
+
+        if (filterGenre) {
+            ratedItems = ratedItems.filter(item => item.genres && item.genres.includes(filterGenre));
+            manualItems = manualItems.filter(item => false); // Nasconde i manuali se cerchi per genere (non lo sappiamo ancora)
+        }
+
+        if (filterPlatform) {
+            ratedItems = ratedItems.filter(item => item.platforms && item.platforms.includes(filterPlatform));
+            manualItems = manualItems.filter(item => false); // Idem per piattaforma
+        }
+
+        if (filterRating) {
+            if (filterRating === 'partial') {
+                ratedItems = ratedItems.filter(item => item.partial === true);
+            } else {
+                const r = parseInt(filterRating);
+                ratedItems = ratedItems.filter(item => item.rating === r && !item.partial);
+                manualItems = manualItems.filter(item => item.rating === r);
+            }
         }
 
         ratedItems.sort((a, b) => b.rating - a.rating || new Date(b.timestamp) - new Date(a.timestamp));
         
-        // Uniamo le due liste (mettiamo i manuali in cima)
         const combinedList = [...manualItems, ...ratedItems];
 
         if (combinedList.length === 0) {
             emptyState.style.display = 'block';
-            emptyText.innerHTML = searchQuery ? "Nessun titolo trovato per la tua ricerca." : "Non hai ancora valutato nessun titolo in questa categoria.";
+            emptyText.innerHTML = "Nessun titolo corrisponde ai filtri impostati.";
             return;
         }
 
@@ -259,7 +325,6 @@ function renderList() {
             
             const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 4px; border-radius: 4px; border: 1px solid #ff9800; margin-left: 4px; vertical-align: middle;">⏳ A metà</span>` : '';
             
-            // Per i manuali, blocchiamo il click sul voto perché l'ID è fasullo
             const ratingClick = item.isManual ? '' : `onclick="changeRating(${item.id})"`;
             const ratingClass = item.isManual ? '' : 'editable-rating';
             const ratingTitle = item.isManual ? 'In attesa di scansione...' : 'Clicca per modificare il voto';

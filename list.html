@@ -106,15 +106,22 @@
             color: white;
             border-color: var(--accent-color);
         }
+        
         .search-container {
             max-width: 1000px;
             width: 100%;
             margin: 10px auto;
             display: none;
             padding: 0 10px;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .search-top-row {
+            display: flex;
+            gap: 10px;
         }
         .search-container input {
-            width: 100%;
+            flex-grow: 1;
             padding: 12px 15px;
             border-radius: 8px;
             border: 1px solid #444;
@@ -124,6 +131,27 @@
             transition: border-color 0.3s;
         }
         .search-container input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+        
+        .filters-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .filters-row select {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background-color: #222;
+            color: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .filters-row select:focus {
             outline: none;
             border-color: var(--accent-color);
         }
@@ -146,13 +174,34 @@
             <button onclick="setView('watchlist')" id="btn-watchlist">Da Vedere (Watchlist)</button>
         </div>
         
-        <!-- Riga di ricerca con pulsante Aggiungi Manuale -->
+        <!-- Blocco Ricerca e Filtri -->
         <div class="search-container" id="search-container">
-            <div style="display: flex; gap: 10px;">
-                <input type="text" id="search-input" placeholder="Cerca titolo, genere o piattaforma..." onkeyup="filterList()">
+            <div class="search-top-row">
+                <input type="text" id="search-input" placeholder="Cerca titolo esatto..." onkeyup="filterList()">
                 <button onclick="askManualAdd()" class="btn-primary" style="white-space: nowrap; width: auto; padding: 0 15px; font-size:0.9em; margin:0;" title="Aggiungi un titolo che non ti è uscito nel quiz">
                     + Aggiungi
                 </button>
+            </div>
+            <div class="filters-row" id="filters-row">
+                <select id="filter-genre" onchange="filterList()">
+                    <option value="">Tutti i Generi</option>
+                </select>
+                <select id="filter-platform" onchange="filterList()">
+                    <option value="">Tutte le Piattaforme</option>
+                    <option value="Netflix">Netflix</option>
+                    <option value="Prime Video">Prime Video</option>
+                    <option value="Disney+">Disney+</option>
+                    <option value="Now TV">Now TV</option>
+                </select>
+                <select id="filter-rating" onchange="filterList()">
+                    <option value="">Tutti i Voti</option>
+                    <option value="5">⭐⭐⭐⭐⭐ (Capolavoro)</option>
+                    <option value="4">⭐⭐⭐⭐ (Bello)</option>
+                    <option value="3">⭐⭐⭐ (Sufficiente)</option>
+                    <option value="2">⭐⭐ (Scadente)</option>
+                    <option value="1">⭐ (Pessimo)</option>
+                    <option value="partial">⏳ Abbandonati a Metà</option>
+                </select>
             </div>
         </div>
     </header>
