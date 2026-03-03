@@ -47,6 +47,7 @@ async function saveTokens() {
     
     document.getElementById('auth-container').style.display = 'none';
     document.getElementById('app-nav').style.display = 'flex';
+    document.getElementById('links-container').style.display = 'flex';
     document.getElementById('app-main').style.display = 'block';
     document.getElementById('btn-logout').style.display = 'block';
     
@@ -102,6 +103,7 @@ async function loadData() {
         console.error(err);
         document.getElementById('auth-container').style.display = 'block';
         document.getElementById('app-nav').style.display = 'none';
+        document.getElementById('links-container').style.display = 'none';
         document.getElementById('app-main').style.display = 'none';
         document.getElementById('btn-logout').style.display = 'none';
     } finally {
@@ -234,7 +236,6 @@ Per ogni consiglio, fornisci:
 Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione.`;
 
     try {
-        // Fix definitivo 2026: Google ha deprecato gli alias base, usiamo il modello specifico gemini-2.5-flash
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_TOKEN}`;
         
         const response = await fetch(url, {
