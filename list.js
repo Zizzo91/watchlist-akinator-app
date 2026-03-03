@@ -162,13 +162,27 @@ async function changeRating(itemId) {
     if (newRatingStr === null) return; 
     const newRating = parseInt(newRatingStr);
     if (isNaN(newRating) || newRating < 1 || newRating > 5) return alert("Valore non valido.");
-    let newPartial = currentEntry.partial || false;
-    if(currentTab === 'tv') newPartial = !confirm(`Hai completato la visione?\n[OK] = Sì\n[Annulla] = No`);
     
     userData[currentTab].ratings[itemId].rating = newRating;
-    userData[currentTab].ratings[itemId].partial = newPartial;
+    // Il cambio di stato tra Completata/Abbandonata ora si fa con l'apposito tasto
     userData[currentTab].ratings[itemId].timestamp = new Date().toISOString();
     renderList(); await saveUserData();
+}
+
+async function togglePartialStatus(itemId) {
+    const item = userData[currentTab].ratings[itemId];
+    if(!item) return;
+    
+    if (item.partial) {
+        item.partial = false;
+        alert("Stato aggiornato: Serie segnata come COMPLETATA! ✅");
+    } else {
+        item.partial = true;
+        alert("Stato aggiornato: Serie segnata come ABBANDONATA / A METÀ! ⏳");
+    }
+    item.timestamp = new Date().toISOString();
+    renderList();
+    await saveUserData();
 }
 
 async function saveUserData() {
@@ -234,11 +248,15 @@ function renderList() {
             const div = document.createElement('div'); div.className = 'list-item';
             const poster = item.poster || 'https://via.placeholder.com/60x90?text=No+Poster';
             const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">⏳ A metà</span>` : '';
-            const ratingClick = item.isManual ? '' : `onclick="changeRating(${item.id})"`;
+            const ratingClick = item.isManual ? '' : `onclick="changeRating('${item.id}')"`;
             const escapedTitle = item.title.replace(/'/g, "\\'");
-            const deleteBtnHtml = !item.isManual ? `<button class="delete-btn" onclick="deleteFromHistory(${item.id}, '${escapedTitle}')">✖</button>` : '';
+            
+            const togglePartialBtn = (currentTab === 'tv' && !item.isManual) 
+                ? `<button class="action-icon" onclick="togglePartialStatus('${item.id}')" title="Cambia stato: ${item.partial ? 'Segna come Completata' : 'Segna come Abbandonata'}" style="color: ${item.partial ? '#4caf50' : '#ff9800'};">${item.partial ? '✅' : '⏳'}</button>`
+                : '';
 
-            // Aggiungiamo link Trailer se non è manuale
+            const deleteBtnHtml = !item.isManual ? `<button class="action-icon" style="color:#ff5252;" onclick="deleteFromHistory('${item.id}', '${escapedTitle}')" title="Elimina dallo Storico">✖</button>` : '';
+
             const searchTrailerUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(item.title + ' ' + (item.year!=='⏳ Ricerca...' ? item.year : '') + ' trailer ita')}`;
             const trailerHtml = !item.isManual ? `<a class="trailer-link" href="${searchTrailerUrl}" target="_blank">▶️ Trailer</a>` : '';
 
@@ -251,8 +269,11 @@ function renderList() {
                     <div>${trailerHtml}</div>
                 </div>
                 <div class="list-item-actions">
-                    <div class="list-item-rating" ${ratingClick}>${item.rating} ⭐</div>
-                    ${deleteBtnHtml}
+                    <div class="list-item-rating" ${ratingClick} title="Modifica Voto">${item.rating} ⭐</div>
+                    <div style="display:flex; gap: 5px; margin-top: auto;">
+                        ${togglePartialBtn}
+                        ${deleteBtnHtml}
+                    </div>
                 </div>
             `;
             listOutput.appendChild(div);
@@ -272,7 +293,7 @@ function renderList() {
             const genres = catItem && catItem.genres ? catItem.genres.join(', ') : (!catItem ? '⏳ In attesa...' : '');
             const platforms = catItem && catItem.platforms ? catItem.platforms.join(', ') : '';
             const escapedTitle = item.title.replace(/'/g, "\\'");
-            const idParam = catItem ? catItem.id : null;
+            const idParam = catItem ? `'${catItem.id}'` : null;
 
             const searchTrailerUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(item.title + ' ' + (year!=='⏳' ? year : '') + ' trailer ita')}`;
 
@@ -289,7 +310,7 @@ function renderList() {
                 </div>
                 <div class="list-item-actions">
                     <button class="mark-seen-btn" onclick="markWatchlistAsSeen('${escapedTitle}', ${idParam})">L'ho Visto!</button>
-                    <button class="delete-btn" onclick="deleteFromWatchlist('${escapedTitle}')">✖</button>
+                    <button class="action-icon" style="color:#ff5252;" onclick="deleteFromWatchlist('${escapedTitle}')" title="Rimuovi">✖</button>
                 </div>
             `;
             listOutput.appendChild(div);
