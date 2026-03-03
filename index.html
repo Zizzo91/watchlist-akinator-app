@@ -20,14 +20,14 @@
             const savedGh = localStorage.getItem('gh_pat');
             const savedGem = localStorage.getItem('gemini_key');
             if (!savedGh || !savedGem) {
-                alert("Non hai i token salvati per generare un link. Clicca sul lucchetto in basso per fare login.");
+                alert("Devi prima accedere per generare un link!");
                 return;
             }
             const url = new URL(window.location.href);
             url.searchParams.set('gh', savedGh);
             url.searchParams.set('gem', savedGem);
             navigator.clipboard.writeText(url.toString()).then(() => {
-                alert("Magic Link copiato negli appunti! Invia questo link per autorizzare un altro dispositivo.");
+                alert("Magic Link copiato negli appunti!\nOra incollalo su WhatsApp o via mail a Michela. Quando lei ci cliccherà, accederà senza dover inserire nessuna password.");
             });
         }
 
@@ -39,21 +39,32 @@
     <style>
         .secret-admin {
             position: fixed;
-            bottom: 10px;
-            right: 10px;
-            opacity: 0.1;
+            bottom: 20px;
+            right: 20px;
+            opacity: 0.5;
             cursor: pointer;
-            font-size: 1.2em;
-            transition: opacity 0.3s;
+            font-size: 2em;
+            background: rgba(0,0,0,0.5);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            border: 1px solid rgba(255,255,255,0.2);
         }
         .secret-admin:hover {
-            opacity: 0.8;
+            opacity: 1;
+            transform: scale(1.1);
+            background: var(--accent-color);
         }
     </style>
 </head>
 <body>
     <header>
-        <h1 style="cursor: pointer;" ondblclick="generateMagicLink()" title="Fai doppio clic qui per generare un Magic Link">🎬 Watchlist Akinator</h1>
+        <h1 style="cursor: pointer;" ondblclick="generateMagicLink()" title="Fai doppio clic qui per generare il Magic Link per Michela">🎬 Watchlist Akinator</h1>
         <p>Valuta i titoli che hai visto per ottenere suggerimenti sempre migliori!</p>
     </header>
 
@@ -83,6 +94,9 @@
                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Michela&backgroundColor=8a2be2" alt="Michela">
                     <h3>Michela</h3>
                 </div>
+            </div>
+            <div style="margin-top: 25px;">
+                <button onclick="generateMagicLink()" class="btn-tertiary" style="font-size: 0.85em; padding: 8px 15px;">🔗 Genera Magic Link per Michela</button>
             </div>
         </div>
 
@@ -136,7 +150,7 @@
         </div>
     </main>
 
-    <div class="secret-admin" onclick="showAdminLogin()" title="Area Admin">🔐</div>
+    <div class="secret-admin" onclick="showAdminLogin()" title="Login Proprietario">🔐</div>
 
     <script src="app.js"></script>
 </body>
