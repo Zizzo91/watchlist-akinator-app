@@ -46,6 +46,7 @@ async function loadData() {
         if(!userData.movies.manual_queue) userData.movies.manual_queue = [];
         if(!userData.tv.manual_queue) userData.tv.manual_queue = [];
         
+        updateFiltersUI();
         populateGenreDropdown();
         renderList();
     } catch (err) {
@@ -53,6 +54,27 @@ async function loadData() {
         alert("Errore nel caricamento dei dati da GitHub.");
     } finally {
         document.getElementById('loading').style.display = 'none';
+    }
+}
+
+function updateFiltersUI() {
+    const ratingSelect = document.getElementById('filter-rating');
+    const currentVal = ratingSelect.value;
+    ratingSelect.innerHTML = `
+        <option value="">Tutti i Voti/Stati</option>
+        <option value="5">⭐⭐⭐⭐⭐</option>
+        <option value="4">⭐⭐⭐⭐</option>
+        <option value="3">⭐⭐⭐</option>
+        <option value="2">⭐⭐</option>
+        <option value="1">⭐</option>
+        <option value="partial">⏳ Abbandonati</option>
+        ${currentTab === 'tv' ? '<option value="ongoing">🔄 In Corso (Attesa)</option>' : ''}
+    `;
+    if (Array.from(ratingSelect.options).some(opt => opt.value === currentVal)) {
+        ratingSelect.value = currentVal;
+    } else {
+        ratingSelect.value = '';
+        filterRating = '';
     }
 }
 
@@ -81,8 +103,10 @@ function setTab(tab) {
     document.getElementById('search-input').value = '';
     document.getElementById('filter-genre').value = '';
     document.getElementById('filter-platform').value = '';
-    document.getElementById('filter-rating').value = '';
-    filterList(); populateGenreDropdown();
+    
+    updateFiltersUI();
+    filterList(); 
+    populateGenreDropdown();
 }
 
 function setView(view) {
@@ -141,12 +165,12 @@ async function markWatchlistAsSeen(title, itemId) {
     const rating = parseInt(ratingStr);
     if (isNaN(rating) || rating < 1 || rating > 5) return alert("Inserisci un numero valido da 1 a 5.");
     let isPartial = false;
-    if(currentTab === 'tv') isPartial = !confirm(`Hai completato la visione di questa serie?\n[OK] = Sì\n[Annulla] = Abbandonata a metà`);
+    if(currentTab === 'tv') isPartial = !confirm(`Hai completato la visione di questa serie?\n[OK] = Sì, l'ho finita/in pari\n[Annulla] = L'ho abbandonata a metà`);
     
     userData[currentTab].watchlist = userData[currentTab].watchlist.filter(item => item.title !== title);
     if (itemId) {
         if (!userData[currentTab].ratings) userData[currentTab].ratings = {};
-        userData[currentTab].ratings[itemId] = { rating: rating, seen: true, partial: isPartial, timestamp: new Date().toISOString() };
+        userData[currentTab].ratings[itemId] = { rating: rating, seen: true, partial: isPartial, ongoing: false, timestamp: new Date().toISOString() };
         if (!userData[currentTab].asked.includes(itemId)) userData[currentTab].asked.push(itemId);
     } else {
         userData[currentTab].manual_queue.push({ title: title, rating: rating, addedAt: new Date().toISOString() });
@@ -164,7 +188,6 @@ async function changeRating(itemId) {
     if (isNaN(newRating) || newRating < 1 || newRating > 5) return alert("Valore non valido.");
     
     userData[currentTab].ratings[itemId].rating = newRating;
-    // Il cambio di stato tra Completata/Abbandonata ora si fa con l'apposito tasto
     userData[currentTab].ratings[itemId].timestamp = new Date().toISOString();
     renderList(); await saveUserData();
 }
@@ -175,14 +198,29 @@ async function togglePartialStatus(itemId) {
     
     if (item.partial) {
         item.partial = false;
-        alert("Stato aggiornato: Serie segnata come COMPLETATA! ✅");
+        alert("Stato aggiornato: Serie segnata come COMPLETATA / IN PARI! ✅");
     } else {
         item.partial = true;
+        item.ongoing = false; // Se l'abbandoni, non stai più aspettando stagioni
         alert("Stato aggiornato: Serie segnata come ABBANDONATA / A METÀ! ⏳");
     }
     item.timestamp = new Date().toISOString();
-    renderList();
-    await saveUserData();
+    renderList(); await saveUserData();
+}
+
+async function toggleOngoingStatus(itemId) {
+    const item = userData[currentTab].ratings[itemId];
+    if(!item) return;
+    
+    item.ongoing = !item.ongoing;
+    if (item.ongoing) {
+        item.partial = false; // Se sei in attesa di stagioni, sei "in pari", non l'hai abbandonata
+        alert("Stato aggiornato: Serie segnata come 'IN CORSO'. Sei in pari e attendi nuove stagioni! 🔄");
+    } else {
+        alert("Stato aggiornato: Serie segnata come CONCLUSIVA/FINITA! 🎬");
+    }
+    item.timestamp = new Date().toISOString();
+    renderList(); await saveUserData();
 }
 
 async function saveUserData() {
@@ -216,7 +254,7 @@ function renderList() {
         const ratings = userData[currentTab]?.ratings || {};
         let ratedItems = Object.keys(ratings).filter(id => ratings[id].seen === true).map(id => {
             const catItem = items.find(i => i.id == id);
-            return { ...catItem, id: id, rating: ratings[id].rating, partial: ratings[id].partial, timestamp: ratings[id].timestamp };
+            return { ...catItem, id: id, rating: ratings[id].rating, partial: ratings[id].partial, ongoing: ratings[id].ongoing, timestamp: ratings[id].timestamp };
         }).filter(i => i.title); 
             
         let manualItems = (userData[currentTab]?.manual_queue || []).map(item => ({
@@ -231,9 +269,10 @@ function renderList() {
         if (filterPlatform) ratedItems = ratedItems.filter(item => item.platforms && item.platforms.includes(filterPlatform));
         if (filterRating) {
             if (filterRating === 'partial') ratedItems = ratedItems.filter(item => item.partial === true);
+            else if (filterRating === 'ongoing') ratedItems = ratedItems.filter(item => item.ongoing === true);
             else {
                 const r = parseInt(filterRating);
-                ratedItems = ratedItems.filter(item => item.rating === r && !item.partial);
+                ratedItems = ratedItems.filter(item => item.rating === r && !item.partial && !item.ongoing);
                 manualItems = manualItems.filter(item => item.rating === r);
             }
         }
@@ -247,12 +286,19 @@ function renderList() {
         combinedList.forEach(item => {
             const div = document.createElement('div'); div.className = 'list-item';
             const poster = item.poster || 'https://via.placeholder.com/60x90?text=No+Poster';
-            const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">⏳ A metà</span>` : '';
+            
+            const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">⏳ Abbandonata</span>` : '';
+            const ongoingBadge = item.ongoing ? `<span style="background: rgba(0, 168, 225, 0.2); color: #00a8e1; font-size:0.7em; padding: 2px 4px; border-radius: 4px; margin-left: 4px;">🔄 In Corso</span>` : '';
+            
             const ratingClick = item.isManual ? '' : `onclick="changeRating('${item.id}')"`;
             const escapedTitle = item.title.replace(/'/g, "\\'");
             
+            const toggleOngoingBtn = (currentTab === 'tv' && !item.isManual) 
+                ? `<button class="action-icon" onclick="toggleOngoingStatus('${item.id}')" title="${item.ongoing ? 'Segna come Conclusa/Finita' : 'Segna come In Corso (Attesa nuove stagioni)'}" style="color: ${item.ongoing ? '#00a8e1' : '#aaa'};">${item.ongoing ? '🔄' : '🎬'}</button>`
+                : '';
+
             const togglePartialBtn = (currentTab === 'tv' && !item.isManual) 
-                ? `<button class="action-icon" onclick="togglePartialStatus('${item.id}')" title="Cambia stato: ${item.partial ? 'Segna come Completata' : 'Segna come Abbandonata'}" style="color: ${item.partial ? '#4caf50' : '#ff9800'};">${item.partial ? '✅' : '⏳'}</button>`
+                ? `<button class="action-icon" onclick="togglePartialStatus('${item.id}')" title="${item.partial ? 'Segna come Vista Tutta/In Pari' : 'Segna come Abbandonata a metà'}" style="color: ${item.partial ? '#4caf50' : '#ff9800'};">${item.partial ? '✅' : '⏳'}</button>`
                 : '';
 
             const deleteBtnHtml = !item.isManual ? `<button class="action-icon" style="color:#ff5252;" onclick="deleteFromHistory('${item.id}', '${escapedTitle}')" title="Elimina dallo Storico">✖</button>` : '';
@@ -263,14 +309,15 @@ function renderList() {
             div.innerHTML = `
                 <img src="${poster}" alt="Poster" onclick="copyTitle('${escapedTitle}')">
                 <div class="list-item-content">
-                    <h3>${item.title} ${item.year !== '⏳ Ricerca...' ? `(${item.year})` : ''} ${partialBadge}</h3>
+                    <h3>${item.title} ${item.year !== '⏳ Ricerca...' ? `(${item.year})` : ''} ${partialBadge} ${ongoingBadge}</h3>
                     <p style="color: ${item.isManual ? '#ffb74d' : '#aaa'}">${(item.genres || []).join(', ')}</p>
                     <p style="font-size:0.8em; margin-top:2px; color:#888;">${item.platforms && item.platforms.length > 0 ? 'Su: ' + item.platforms.join(', ') : item.year}</p>
                     <div>${trailerHtml}</div>
                 </div>
                 <div class="list-item-actions">
                     <div class="list-item-rating" ${ratingClick} title="Modifica Voto">${item.rating} ⭐</div>
-                    <div style="display:flex; gap: 5px; margin-top: auto;">
+                    <div style="display:flex; gap: 3px; margin-top: auto;">
+                        ${toggleOngoingBtn}
                         ${togglePartialBtn}
                         ${deleteBtnHtml}
                     </div>
