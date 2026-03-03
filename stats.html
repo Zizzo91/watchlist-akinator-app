@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistiche - Watchlist Akinator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .stats-container {
+            max-width: 800px;
+            width: 100%;
+            margin: 20px auto;
+            padding: 0 15px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .stats-container {
+                grid-template-columns: 1fr 1fr;
+            }
+            .full-width {
+                grid-column: span 2;
+            }
+        }
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .stat-card h3 {
+            margin-top: 0;
+            color: var(--accent-color);
+        }
+        .big-number {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #fff;
+        }
+        canvas {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div style="display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto; padding: 0 10px;">
+            <h1 id="profile-name-header" style="font-size: 1.5em; margin:0;">📊 Statistiche</h1>
+            <a href="index.html" style="color: white; text-decoration: none; border-bottom: 1px solid var(--accent-color); font-size: 0.9em;">← Torna al Quiz</a>
+        </div>
+    </header>
+
+    <main id="app-main" style="display: flex; flex-direction: column; align-items: center;">
+        <div id="loading" style="margin-top: 20px;">Analisi dei dati in corso...</div>
+        
+        <div class="stats-container" id="stats-content" style="display: none;">
+            
+            <div class="stat-card full-width">
+                <h3>Titoli Visti in Totale</h3>
+                <div style="display: flex; justify-content: space-around; flex-wrap: wrap;">
+                    <div>
+                        <div class="big-number" id="total-movies">0</div>
+                        <div style="color: #aaa;">🎬 Film</div>
+                    </div>
+                    <div>
+                        <div class="big-number" id="total-tv">0</div>
+                        <div style="color: #aaa;">📺 Serie TV</div>
+                    </div>
+                    <div>
+                        <div class="big-number" id="total-abandoned" style="color: #ff9800;">0</div>
+                        <div style="color: #aaa;">⏳ Serie Abbandonate</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <h3>Distribuzione Voti</h3>
+                <canvas id="ratingsChart"></canvas>
+            </div>
+
+            <div class="stat-card">
+                <h3>Top Generi Preferiti</h3>
+                <p style="font-size: 0.8em; color: #aaa; margin-top:-10px; margin-bottom:10px;">(Basato sui titoli con voto 4+)</p>
+                <canvas id="genresChart"></canvas>
+            </div>
+
+            <div class="stat-card full-width">
+                <h3>Le Tue Piattaforme</h3>
+                <canvas id="platformsChart" style="max-height: 250px;"></canvas>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="stats.js"></script>
+</body>
+</html>

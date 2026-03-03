@@ -1,0 +1,21 @@
+{
+  "name": "Watchlist Akinator",
+  "short_name": "Watchlist",
+  "description": "Valuta e scopri film e serie TV con IA.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#141414",
+  "theme_color": "#e50914",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/png?seed=movie&backgroundColor=e50914",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/png?seed=movie&backgroundColor=e50914",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
