@@ -25,12 +25,12 @@ function b64EncodeUnicode(str) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Rileggiamo dal localStorage nel caso in cui il Magic Link li abbia appena settati
     GITHUB_TOKEN = localStorage.getItem('gh_pat');
     GEMINI_KEY = localStorage.getItem('gemini_key');
 
     if (GITHUB_TOKEN && GEMINI_KEY) {
         document.getElementById('error-container').style.display = 'none';
+        document.getElementById('auth-container').style.display = 'none';
         await loadData();
     } else {
         document.getElementById('profile-container').style.display = 'none';
@@ -39,13 +39,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
+function saveTokens() {
+    GITHUB_TOKEN = document.getElementById('gh-pat').value.trim();
+    GEMINI_KEY = document.getElementById('gemini-key').value.trim();
+    if (!GITHUB_TOKEN || !GEMINI_KEY) {
+        alert('Inserisci entrambi i token!');
+        return;
+    }
+    localStorage.setItem('gh_pat', GITHUB_TOKEN);
+    localStorage.setItem('gemini_key', GEMINI_KEY);
+    document.getElementById('auth-container').style.display = 'none';
+    loadData();
+}
+
 async function loadData() {
     try {
         const catalogRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/catalog.json`, {
             headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
             cache: 'no-store'
         });
-        if (!catalogRes.ok) throw new Error("Errore nel caricamento del catalogo.");
+        if (!catalogRes.ok) throw new Error("Errore nel caricamento del catalogo. Token invalido?");
         catalogData = JSON.parse(b64DecodeUnicode((await catalogRes.json()).content));
 
         const userRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
@@ -81,12 +94,14 @@ async function loadData() {
 
     } catch (err) {
         console.error(err);
-        // Se c'è un errore (es. token revocato o invalido), blocca l'accesso
         document.getElementById('profile-container').style.display = 'none';
         document.getElementById('game-container').style.display = 'none';
         document.getElementById('error-container').style.display = 'block';
+        // Rimuoviamo i token dal localstorage perché probabilmente sono errati/scaduti
         localStorage.removeItem('gh_pat');
         localStorage.removeItem('gemini_key');
+        GITHUB_TOKEN = null;
+        GEMINI_KEY = null;
     }
 }
 

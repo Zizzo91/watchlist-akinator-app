@@ -16,12 +16,11 @@
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        // Funzione nascosta per il creatore dell'app per generare link per gli altri dispositivi
         function generateMagicLink() {
             const savedGh = localStorage.getItem('gh_pat');
             const savedGem = localStorage.getItem('gemini_key');
             if (!savedGh || !savedGem) {
-                alert("Non hai i token salvati in questo browser per generare un link!");
+                alert("Non hai i token salvati per generare un link. Clicca sul lucchetto in basso per fare login.");
                 return;
             }
             const url = new URL(window.location.href);
@@ -31,11 +30,30 @@
                 alert("Magic Link copiato negli appunti! Invia questo link per autorizzare un altro dispositivo.");
             });
         }
+
+        function showAdminLogin() {
+            document.getElementById('error-container').style.display = 'none';
+            document.getElementById('auth-container').style.display = 'block';
+        }
     </script>
+    <style>
+        .secret-admin {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            opacity: 0.1;
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: opacity 0.3s;
+        }
+        .secret-admin:hover {
+            opacity: 0.8;
+        }
+    </style>
 </head>
 <body>
     <header>
-        <h1 style="cursor: pointer;" ondblclick="generateMagicLink()" title="Fai doppio clic qui per generare un Magic Link se sei l'admin">🎬 Watchlist Akinator</h1>
+        <h1 style="cursor: pointer;" ondblclick="generateMagicLink()" title="Fai doppio clic qui per generare un Magic Link">🎬 Watchlist Akinator</h1>
         <p>Valuta i titoli che hai visto per ottenere suggerimenti sempre migliori!</p>
     </header>
 
@@ -43,6 +61,14 @@
         <div id="error-container" class="card" style="display: none; margin-bottom: 30px; border-color: var(--accent-color);">
             <h2 style="color: var(--accent-color);">Accesso Negato</h2>
             <p>Non sei autorizzato a usare questa applicazione. Richiedi un Magic Link di accesso al proprietario.</p>
+        </div>
+
+        <!-- Schermata di Login Segreta per l'Admin -->
+        <div id="auth-container" class="card" style="display: none; margin-bottom: 30px;">
+            <h2 style="margin-top:0;">Login Proprietario</h2>
+            <input type="password" id="gh-pat" placeholder="GitHub Personal Access Token">
+            <input type="password" id="gemini-key" placeholder="Google Gemini API Key">
+            <button onclick="saveTokens()" class="btn-primary">Salva ed Entra</button>
         </div>
 
         <!-- Schermata Scelta Profilo -->
@@ -109,6 +135,9 @@
             </div>
         </div>
     </main>
+
+    <div class="secret-admin" onclick="showAdminLogin()" title="Area Admin">🔐</div>
+
     <script src="app.js"></script>
 </body>
 </html>
