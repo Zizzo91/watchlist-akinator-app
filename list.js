@@ -93,7 +93,6 @@ async function loadData() {
     }
 }
 
-// Popola la tendina dei generi in base ai titoli che l'utente ha effettivamente valutato
 function populateGenreDropdown() {
     const ratings = userData[currentTab]?.ratings || {};
     const items = catalogData[currentTab] || [];
@@ -110,10 +109,8 @@ function populateGenreDropdown() {
     });
 
     const genreSelect = document.getElementById('filter-genre');
-    // Mantiene la prima opzione "Tutti i Generi" e cancella il resto
     genreSelect.innerHTML = '<option value="">Tutti i Generi</option>';
     
-    // Inserisce i generi in ordine alfabetico
     Array.from(uniqueGenres).sort().forEach(g => {
         const opt = document.createElement('option');
         opt.value = g;
@@ -127,12 +124,11 @@ function setTab(tab) {
     document.getElementById('btn-movies').classList.toggle('active', tab === 'movies');
     document.getElementById('btn-tv').classList.toggle('active', tab === 'tv');
     
-    // Reset filtri al cambio tab
     document.getElementById('search-input').value = '';
     document.getElementById('filter-genre').value = '';
     document.getElementById('filter-platform').value = '';
     document.getElementById('filter-rating').value = '';
-    filterList(); // Questo chiamerà renderList() con valori vuoti
+    filterList(); 
     populateGenreDropdown();
 }
 
@@ -141,7 +137,6 @@ function setView(view) {
     document.getElementById('btn-history').classList.toggle('active', view === 'history');
     document.getElementById('btn-watchlist').classList.toggle('active', view === 'watchlist');
     
-    // Nascondi i filtri avanzati se siamo in watchlist
     if(view === 'watchlist') {
         document.getElementById('filters-row').style.display = 'none';
     } else {
@@ -161,32 +156,50 @@ function filterList() {
 
 async function askManualAdd() {
     const typeLabel = currentTab === 'movies' ? 'del Film' : 'della Serie TV';
-    const title = prompt(`Inserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere manualmente:`);
-    if (!title || !title.trim()) return;
-
-    const ratingStr = prompt(`Che voto dai a "${title.trim()}"? (da 1 a 5)`);
-    if (!ratingStr) return;
-
-    const rating = parseInt(ratingStr);
-    if (isNaN(rating) || rating < 1 || rating > 5) {
-        alert("Devi inserire un numero tra 1 e 5.");
-        return;
-    }
-
-    if (!userData[currentTab].manual_queue) {
-        userData[currentTab].manual_queue = [];
-    }
-
-    userData[currentTab].manual_queue.push({
-        title: title.trim(),
-        rating: rating,
-        addedAt: new Date().toISOString()
-    });
-
-    renderList(); 
-    await saveUserData();
     
-    alert(`"${title.trim()}" inserito in coda con successo!\n\nL'algoritmo andrà a cercare il poster e le info ufficiali su TMDB stanotte e domani lo vedrai completato nella tua lista.`);
+    if (currentView === 'history') {
+        // Aggiunta Manuale allo Storico
+        const title = prompt(`STORICO VOTATI:\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere manualmente:`);
+        if (!title || !title.trim()) return;
+
+        const ratingStr = prompt(`Che voto dai a "${title.trim()}"? (da 1 a 5)`);
+        if (!ratingStr) return;
+
+        const rating = parseInt(ratingStr);
+        if (isNaN(rating) || rating < 1 || rating > 5) {
+            alert("Devi inserire un numero tra 1 e 5.");
+            return;
+        }
+
+        if (!userData[currentTab].manual_queue) userData[currentTab].manual_queue = [];
+
+        userData[currentTab].manual_queue.push({
+            title: title.trim(),
+            rating: rating,
+            addedAt: new Date().toISOString()
+        });
+
+        renderList(); 
+        await saveUserData();
+        alert(`"${title.trim()}" inserito in coda con successo!\n\nL'algoritmo andrà a cercare il poster e le info ufficiali su TMDB stanotte.`);
+        
+    } else {
+        // Aggiunta Manuale alla Watchlist
+        const title = prompt(`DA VEDERE (WATCHLIST):\nInserisci il NOME ESATTO ${typeLabel} che vuoi inserire nella tua lista dei desideri:`);
+        if (!title || !title.trim()) return;
+
+        if (!userData[currentTab].watchlist) userData[currentTab].watchlist = [];
+
+        userData[currentTab].watchlist.push({
+            title: title.trim(),
+            reason: "Aggiunto manualmente.",
+            addedAt: new Date().toISOString()
+        });
+
+        renderList(); 
+        await saveUserData();
+        alert(`"${title.trim()}" inserito nella tua Watchlist!\n\nL'algoritmo andrà a cercare il poster e i dettagli su TMDB stanotte.`);
+    }
 }
 
 async function changeRating(itemId) {
@@ -248,10 +261,10 @@ function renderList() {
     const emptyState = document.getElementById('empty-state');
     const emptyText = document.getElementById('empty-text');
     listOutput.innerHTML = '';
+    const items = catalogData[currentTab] || [];
     
     if (currentView === 'history') {
         const ratings = userData[currentTab]?.ratings || {};
-        const items = catalogData[currentTab] || [];
         
         let ratedItems = Object.keys(ratings)
             .filter(id => ratings[id].seen === true)
@@ -279,7 +292,6 @@ function renderList() {
             timestamp: item.addedAt
         }));
 
-        // APPLICAZIONE DEI FILTRI (AND Logico)
         if (searchQuery) {
             ratedItems = ratedItems.filter(item => item.title.toLowerCase().includes(searchQuery));
             manualItems = manualItems.filter(item => item.title.toLowerCase().includes(searchQuery));
@@ -287,12 +299,12 @@ function renderList() {
 
         if (filterGenre) {
             ratedItems = ratedItems.filter(item => item.genres && item.genres.includes(filterGenre));
-            manualItems = manualItems.filter(item => false); // Nasconde i manuali se cerchi per genere (non lo sappiamo ancora)
+            manualItems = manualItems.filter(item => false); 
         }
 
         if (filterPlatform) {
             ratedItems = ratedItems.filter(item => item.platforms && item.platforms.includes(filterPlatform));
-            manualItems = manualItems.filter(item => false); // Idem per piattaforma
+            manualItems = manualItems.filter(item => false); 
         }
 
         if (filterRating) {
@@ -334,7 +346,7 @@ function renderList() {
                 <div class="list-item-content">
                     <h3>${item.title} ${item.year !== '⏳ Ricerca...' ? `(${item.year})` : ''} ${partialBadge}</h3>
                     <p style="color: ${item.isManual ? '#ffb74d' : '#aaa'}">${(item.genres || []).join(', ')}</p>
-                    <p style="font-size:0.8em; margin-top:4px; color:#888;">${item.platforms.length > 0 ? 'Su: ' + item.platforms.join(', ') : item.year}</p>
+                    <p style="font-size:0.8em; margin-top:4px; color:#888;">${item.platforms && item.platforms.length > 0 ? 'Su: ' + item.platforms.join(', ') : item.year}</p>
                 </div>
                 <div class="list-item-rating ${ratingClass}" ${ratingClick} title="${ratingTitle}">
                     ${item.rating} ⭐
@@ -365,11 +377,30 @@ function renderList() {
         
         reversedList.forEach(item => {
             const div = document.createElement('div');
-            div.className = 'list-item watchlist-item';
+            div.className = 'list-item'; 
+            
+            // Cerca il titolo nel catalogo (se c'è l'id lo usa, altrimenti usa il titolo)
+            let catItem = null;
+            if (item.id) {
+                catItem = items.find(i => i.id == item.id);
+            } else {
+                catItem = items.find(i => i.title.toLowerCase() === item.title.toLowerCase());
+            }
+
+            const isPending = !catItem;
+            const poster = catItem && catItem.poster ? catItem.poster : 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3';
+            const year = catItem && catItem.year ? catItem.year : (item.year || '⏳');
+            const genres = catItem && catItem.genres ? catItem.genres.join(', ') : (isPending ? '⏳ In attesa del Server...' : '');
+            const platforms = catItem && catItem.platforms ? catItem.platforms.join(', ') : '';
             
             div.innerHTML = `
-                <h3 style="color: var(--accent-color); margin-bottom: 5px; font-size: 1.1em;">${item.title} (${item.year})</h3>
-                <p style="color: #ddd; font-style: italic; font-size: 0.9em;">"${item.reason}"</p>
+                <img src="${poster}" alt="Poster" style="align-self: flex-start;">
+                <div class="list-item-content">
+                    <h3 style="color: var(--accent-color);">${item.title} ${year !== '⏳' ? `(${year})` : ''}</h3>
+                    <p style="color: ${isPending ? '#ffb74d' : '#aaa'}; font-size: 0.8em; margin-bottom: 5px;">${genres}</p>
+                    <p style="color: #ddd; font-style: italic; font-size: 0.9em; white-space: normal; line-height: 1.3;">"${item.reason}"</p>
+                    ${platforms ? `<p style="font-size:0.8em; margin-top:6px; color:#888;">Su: ${platforms}</p>` : ''}
+                </div>
             `;
             listOutput.appendChild(div);
         });

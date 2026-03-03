@@ -229,13 +229,13 @@ async function addCurrentToWatchlist() {
     showLoading(true);
     
     currentUserData[currentTab].watchlist.push({
+        id: currentItem.id, // ID aggiunto qui! Così nel rendering ha già il poster subito
         title: currentItem.title,
         year: currentItem.year,
         reason: "Aggiunto manualmente durante il quiz perché ispirava.",
         addedAt: new Date().toISOString()
     });
     
-    // Lo segniamo anche come "chiesto" così non te lo ripropone nel quiz
     currentUserData[currentTab].asked.push(currentItem.id);
     
     await saveUserData();
