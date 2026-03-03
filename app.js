@@ -158,7 +158,6 @@ function renderNextItem() {
     document.getElementById('item-poster').src = posterSrc;
     document.getElementById('item-details').innerText = `Generi: ${(currentItem.genres || []).join(', ')} | Su: ${(currentItem.platforms || []).join(', ')}`;
     
-    // Mostra il pulsante "Visto a metà" solo per le Serie TV
     const partialBtn = document.getElementById('btn-partial');
     if(currentTab === 'tv') {
         partialBtn.style.display = 'inline-block';
@@ -167,7 +166,6 @@ function renderNextItem() {
     }
 }
 
-// isPartial serve a marcare la serie come abbandonata (false di default)
 async function rateItem(score, isPartial = false) {
     if (!currentItem) return;
     showLoading(true);
@@ -185,11 +183,10 @@ async function rateItem(score, isPartial = false) {
     renderNextItem();
 }
 
-// Funzione dedicata quando l'utente clicca "L'ho visto a metà"
 function askPartialRating() {
     if (!currentItem) return;
     const scoreStr = prompt(`Hai iniziato ${currentItem.title} ma non l'hai finito.\n\nFino al punto in cui l'hai visto, che voto gli daresti? (da 1 a 5)`);
-    if (scoreStr === null) return; // annullato
+    if (scoreStr === null) return; 
     
     const score = parseInt(scoreStr);
     if (isNaN(score) || score < 1 || score > 5) {
@@ -197,7 +194,6 @@ function askPartialRating() {
         return;
     }
     
-    // Salva con flag partial = true
     rateItem(score, true);
 }
 
@@ -258,50 +254,74 @@ async function askGemini() {
     document.getElementById('gemini-output').style.display = 'block';
     document.getElementById('gemini-output').innerHTML = "<em>L'Intelligenza Artificiale sta analizzando i tuoi gusti...</em>";
     
-    const ratings = currentUserData[currentTab].ratings;
+    const ratingsObj = currentUserData[currentTab].ratings;
     const items = catalogData[currentTab];
     const watchlist = currentUserData[currentTab].watchlist || [];
     
-    // Distinguiamo anche cosa gli è piaciuto e cosa ha abbandonato
-    const positiveItems = Object.keys(ratings)
-        .filter(id => ratings[id].seen && ratings[id].rating >= 4 && !ratings[id].partial)
-        .map(id => items.find(i => i.id == id)?.title)
-        .filter(t => t);
-        
-    const abandonedItems = Object.keys(ratings)
-        .filter(id => ratings[id].seen && ratings[id].partial)
-        .map(id => items.find(i => i.id == id)?.title)
-        .filter(t => t);
+    // Convertiamo l'oggetto ratings in un array per poterlo ordinare e filtrare comodamente
+    const allRatings = Object.keys(ratingsObj)
+        .filter(id => ratingsObj[id].seen)
+        .map(id => {
+            const catalogItem = items.find(i => i.id == id);
+            return {
+                title: catalogItem ? catalogItem.title : `ID:${id}`,
+                genres: catalogItem ? (catalogItem.genres || []).join(', ') : '',
+                rating: ratingsObj[id].rating,
+                partial: ratingsObj[id].partial,
+                timestamp: new Date(ratingsObj[id].timestamp || 0).getTime()
+            };
+        });
 
-    const negativeItems = Object.keys(ratings)
-        .filter(id => ratings[id].seen && ratings[id].rating <= 2)
-        .map(id => items.find(i => i.id == id)?.title)
-        .filter(t => t);
-
-    const evaluatedTitles = Object.keys(ratings)
-        .filter(id => ratings[id].seen)
-        .map(id => items.find(i => i.id == id)?.title)
-        .filter(t => t);
+    // Se l'utente ha votato TROPPE cose, il prompt esplode (Token Limit di Gemini).
+    // Ottimizzazione dinamica: passiamo a Gemini i 20 titoli più piaciuti (mix tra recenti e capolavori storici),
+    // e i 15 titoli più odiati/abbandonati per creare il "profilo" perfetto.
     
+    // I preferiti (Rating 4-5)
+    let positives = allRatings.filter(r => r.rating >= 4 && !r.partial);
+    // Ordiniamo per voto decrescente, e a parità di voto per data di recensione (i più recenti prima)
+    positives.sort((a, b) => b.rating - a.rating || b.timestamp - a.timestamp);
+    const topPositives = positives.slice(0, 20).map(r => `"${r.title}" (Genere: ${r.genres})`);
+
+    // I più odiati (Rating 1-2)
+    let negatives = allRatings.filter(r => r.rating <= 2 && !r.partial);
+    negatives.sort((a, b) => a.rating - b.rating || b.timestamp - a.timestamp);
+    const topNegatives = negatives.slice(0, 10).map(r => `"${r.title}"`);
+
+    // Quelli abbandonati
+    let abandoned = allRatings.filter(r => r.partial);
+    abandoned.sort((a, b) => b.timestamp - a.timestamp); // I più recentemente abbandonati
+    const topAbandoned = abandoned.slice(0, 10).map(r => `"${r.title}"`);
+
+    // La "Blacklist" totale (non suggerire roba già vista o in watchlist)
+    // Prendo solo i titoli per alleggerire il prompt
+    const evaluatedTitles = allRatings.map(r => r.title);
     const watchlistTitles = watchlist.map(w => w.title);
     const doNotSuggest = [...evaluatedTitles, ...watchlistTitles];
         
-    let prompt = `Sei un esperto di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
-L'utente ${currentProfile} ha apprezzato molto e completato: ${positiveItems.join(', ')}.
-Non gli sono piaciuti: ${negativeItems.join(', ')}.
+    let prompt = `Agisci come un esperto sommelier di ${currentTab === 'movies' ? 'film' : 'serie tv'}.
+Devi consigliare 3 ${currentTab === 'movies' ? 'film' : 'serie tv'} al profilo utente "${currentProfile}".
+
+ECCO IL SUO PROFILO DINAMICO:
+Ha AMATO questi titoli: ${topPositives.join(', ')}.
+Non gli sono per niente piaciuti: ${topNegatives.join(', ')}.
 `;
 
-    if(abandonedItems.length > 0) {
-        prompt += `ATTENZIONE: ha iniziato a guardare queste serie ma le ha ABBANDONATE A METÀ (forse per troppe stagioni, lentezza o calo di qualità): ${abandonedItems.join(', ')}. Evita titoli con strutture simili.\n`;
+    if(topAbandoned.length > 0) {
+        prompt += `ATTENZIONE: ha INIZIATO MA ABBANDONATO a metà questi titoli (ritmo troppo lento? calo qualità?): ${topAbandoned.join(', ')}. Evita strutture simili.\n`;
     }
 
-    prompt += `NON suggerire assolutamente questi titoli perché li conosce già o li ha in lista: ${doNotSuggest.join(', ')}.
-Suggerisci 3 ${currentTab === 'movies' ? 'film' : 'serie tv'} disponibili in streaming in Italia che potrebbero piacergli moltissimo.
+    // Regola importante per il modello
+    prompt += `
+REGOLE RIGIDE:
+1. NON suggerire assolutamente NESSUN titolo presente in questa lista (li ha già visti o sono in coda): ${JSON.stringify(doNotSuggest)}.
+2. I titoli devono essere veri, esistenti e disponibili sulle principali piattaforme streaming italiane (Netflix, Prime, Disney, NowTV).
+3. Sii vario: non suggerire 3 titoli identici. Cerca un titolo famosissimo, uno medio e una "chicca nascosta" basata sui suoi gusti.
+
 Rispondi in formato JSON ESATTO con questa struttura:
 [
-  { "title": "Titolo", "year": 2023, "reason": "Breve motivo per cui gli piacerà in base ai suoi gusti (evita spoiler)" }
+  { "title": "Nome Esatto", "year": 2023, "reason": "1 riga molto convincente su perché si adatta perfettamente al suo profilo, citando in modo colloquiale i film che ha amato" }
 ]
-Solo il JSON valido, niente formattazione markdown.`;
+Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.`;
 
     try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
@@ -309,7 +329,10 @@ Solo il JSON valido, niente formattazione markdown.`;
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.7 }
+                generationConfig: { 
+                    temperature: 0.8, // Leggermente più alto per favorire scoperte originali
+                    topK: 40 
+                }
             })
         });
 
@@ -339,7 +362,7 @@ Solo il JSON valido, niente formattazione markdown.`;
 
     } catch (err) {
         console.error(err);
-        document.getElementById('gemini-output').innerHTML = "<em style='color:red;'>Errore nella generazione con Gemini. Riprova.</em>";
+        document.getElementById('gemini-output').innerHTML = "<em style='color:red;'>Errore nella generazione con Gemini. Prova a chiedere di nuovo.</em>";
     }
 }
 
