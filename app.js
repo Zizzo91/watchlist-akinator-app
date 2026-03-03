@@ -258,7 +258,6 @@ async function askGemini() {
     const items = catalogData[currentTab];
     const watchlist = currentUserData[currentTab].watchlist || [];
     
-    // Convertiamo l'oggetto ratings in un array per poterlo ordinare e filtrare comodamente
     const allRatings = Object.keys(ratingsObj)
         .filter(id => ratingsObj[id].seen)
         .map(id => {
@@ -272,28 +271,25 @@ async function askGemini() {
             };
         });
 
-    // Se l'utente ha votato TROPPE cose, il prompt esplode (Token Limit di Gemini).
-    // Ottimizzazione dinamica: passiamo a Gemini i 20 titoli più piaciuti (mix tra recenti e capolavori storici),
-    // e i 15 titoli più odiati/abbandonati per creare il "profilo" perfetto.
+    // AUMENTATI I LIMITI PER MAGGIORE PRECISIONE (Senza rompere il Token Limit)
     
-    // I preferiti (Rating 4-5)
+    // I preferiti: da 20 passiamo a 40 (circa 2-3 generazioni di context, Gemini 2.5 Flash le regge benissimo)
     let positives = allRatings.filter(r => r.rating >= 4 && !r.partial);
-    // Ordiniamo per voto decrescente, e a parità di voto per data di recensione (i più recenti prima)
     positives.sort((a, b) => b.rating - a.rating || b.timestamp - a.timestamp);
-    const topPositives = positives.slice(0, 20).map(r => `"${r.title}" (Genere: ${r.genres})`);
+    const topPositives = positives.slice(0, 40).map(r => `"${r.title}" (Genere: ${r.genres})`);
 
-    // I più odiati (Rating 1-2)
+    // I più odiati: da 10 passiamo a 20
     let negatives = allRatings.filter(r => r.rating <= 2 && !r.partial);
     negatives.sort((a, b) => a.rating - b.rating || b.timestamp - a.timestamp);
-    const topNegatives = negatives.slice(0, 10).map(r => `"${r.title}"`);
+    const topNegatives = negatives.slice(0, 20).map(r => `"${r.title}"`);
 
-    // Quelli abbandonati
+    // Quelli abbandonati: da 10 passiamo a 15
     let abandoned = allRatings.filter(r => r.partial);
-    abandoned.sort((a, b) => b.timestamp - a.timestamp); // I più recentemente abbandonati
-    const topAbandoned = abandoned.slice(0, 10).map(r => `"${r.title}"`);
+    abandoned.sort((a, b) => b.timestamp - a.timestamp); 
+    const topAbandoned = abandoned.slice(0, 15).map(r => `"${r.title}"`);
 
-    // La "Blacklist" totale (non suggerire roba già vista o in watchlist)
-    // Prendo solo i titoli per alleggerire il prompt
+    // Invia la lista di TUTTI i titoli visti/scartati/watchlist affinché NON li suggerisca mai.
+    // L'unica accortezza è mandare SOLO il titolo puro per risparmiare token.
     const evaluatedTitles = allRatings.map(r => r.title);
     const watchlistTitles = watchlist.map(w => w.title);
     const doNotSuggest = [...evaluatedTitles, ...watchlistTitles];
@@ -310,7 +306,6 @@ Non gli sono per niente piaciuti: ${topNegatives.join(', ')}.
         prompt += `ATTENZIONE: ha INIZIATO MA ABBANDONATO a metà questi titoli (ritmo troppo lento? calo qualità?): ${topAbandoned.join(', ')}. Evita strutture simili.\n`;
     }
 
-    // Regola importante per il modello
     prompt += `
 REGOLE RIGIDE:
 1. NON suggerire assolutamente NESSUN titolo presente in questa lista (li ha già visti o sono in coda): ${JSON.stringify(doNotSuggest)}.
@@ -330,7 +325,7 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
-                    temperature: 0.8, // Leggermente più alto per favorire scoperte originali
+                    temperature: 0.8,
                     topK: 40 
                 }
             })
