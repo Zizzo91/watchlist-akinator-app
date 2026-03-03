@@ -289,7 +289,12 @@ function shuffleArray(array) {
 
 async function askGemini() {
     document.getElementById('gemini-output').style.display = 'block';
-    document.getElementById('gemini-output').innerHTML = "<em>L'Intelligenza Artificiale sta analizzando i tuoi gusti e cercando i titoli...</em>";
+    document.getElementById('gemini-output').innerHTML = `
+        <div style="text-align:center; padding: 20px;">
+            <div style="font-size: 2.5em; margin-bottom: 15px; animation: pulse 1.5s infinite;">🤖</div>
+            <em style="color: var(--text-muted);">Gemini sta analizzando il tuo profilo e cercando i titoli perfetti...</em>
+        </div>
+    `;
     
     const ratingsObj = currentUserData[currentTab].ratings;
     const items = catalogData[currentTab];
@@ -307,7 +312,6 @@ async function askGemini() {
             };
         });
 
-    // Filtriamo e RANDOMIZZIAMO il campione per Gemini
     let positives = allRatings.filter(r => r.rating >= 4 && !r.partial);
     positives = shuffleArray(positives);
     const topPositives = positives.slice(0, 30).map(r => `"${r.title}" (Genere: ${r.genres})`);
@@ -320,14 +324,12 @@ async function askGemini() {
     abandoned = shuffleArray(abandoned);
     const topAbandoned = abandoned.slice(0, 10).map(r => `"${r.title}"`);
 
-    // Calcolo rigoroso dei titoli DA NON SUGGERIRE (Storico + Watchlist)
     const evaluatedTitles = Object.keys(ratingsObj).map(id => {
         const catalogItem = items.find(i => i.id == id);
         return catalogItem ? catalogItem.title : null;
     }).filter(t => t);
     
     const watchlistTitles = watchlist.map(w => w.title);
-    // Uniamo e rimuoviamo eventuali duplicati
     const doNotSuggest = [...new Set([...evaluatedTitles, ...watchlistTitles])];
     
     const numSuggestions = currentTab === 'movies' ? 10 : 5;
@@ -363,7 +365,7 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: { 
-                    temperature: 0.9, // Aumentata leggermente per favorire risultati più creativi e vari
+                    temperature: 0.9, 
                     topK: 40 
                 }
             })
@@ -375,14 +377,20 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
         text = text.replace(/```json/g, '').replace(/```/g, '').trim();
         const suggestions = JSON.parse(text);
         
-        let html = "<ul style='padding-left: 20px;'>";
+        let html = `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(138,43,226,0.3); padding-bottom:10px; margin-bottom:15px;">
+                <h3 style="margin:0; color:#b16eff;">✨ I Consigli di Gemini</h3>
+                <button onclick="document.getElementById('gemini-output').style.display='none'" style="background:none; border:none; color:#aaa; font-size:1.5em; cursor:pointer; padding:0; line-height:1;" title="Chiudi">&times;</button>
+            </div>
+            <ul style='padding-left: 20px; margin:0;'>
+        `;
         suggestions.forEach(s => {
             const escapedTitle = s.title.replace(/'/g, "\\'");
             const escapedReason = s.reason.replace(/'/g, "\\'");
             html += `
-                <li>
-                    <strong>${s.title} (${s.year})</strong><br>
-                    <span class="small-text">${s.reason}</span><br>
+                <li style="margin-bottom: 15px;">
+                    <strong style="color:var(--accent-color); font-size:1.1em;">${s.title} (${s.year})</strong><br>
+                    <span style="font-size:0.9em; color:#ddd;">${s.reason}</span><br>
                     <button class="btn-primary" style="background-color: var(--success-color); padding: 5px 10px; margin-top: 8px; font-size: 0.8em; width: auto;" 
                             onclick="addToWatchlist('${escapedTitle}', ${s.year}, '${escapedReason}')">
                         + Salva in Watchlist
@@ -395,7 +403,13 @@ Restituisci SOLO il JSON puro, senza markdown (\`\`\`) e senza testo aggiuntivo.
 
     } catch (err) {
         console.error(err);
-        document.getElementById('gemini-output').innerHTML = "<em style='color:red;'>Errore nella generazione con Gemini. Prova a chiedere di nuovo.</em>";
+        document.getElementById('gemini-output').innerHTML = `
+            <div style='padding:20px; text-align:center;'>
+                <em style='color:#ff5252;'>Errore nella generazione con Gemini. Controlla la tua API Key o riprova tra poco.</em>
+                <br><br>
+                <button onclick="document.getElementById('gemini-output').style.display='none'" class="btn-secondary" style="width: auto; padding: 5px 15px;">Chiudi</button>
+            </div>
+        `;
     }
 }
 

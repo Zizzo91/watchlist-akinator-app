@@ -81,6 +81,57 @@
             background-color: rgba(255, 152, 0, 0.1);
             box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
         }
+
+        /* Nuovi stili per la Action Bar Moderna */
+        .quick-actions {
+            display: flex;
+            gap: 15px;
+            margin: 15px 0 25px 0;
+            justify-content: center;
+        }
+        .quick-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: var(--card-bg);
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 12px;
+            padding: 12px 10px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .quick-btn:hover {
+            background: #333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .quick-btn.gemini-btn {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.15) 0%, rgba(75, 0, 130, 0.15) 100%);
+            border-color: #8a2be2;
+        }
+        .quick-btn.gemini-btn:hover {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.3) 0%, rgba(75, 0, 130, 0.3) 100%);
+            box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
+        }
+        
+        .gemini-card {
+            border: 1px solid #8a2be2;
+            background: linear-gradient(to bottom, rgba(138,43,226,0.1), var(--bg-color));
+            margin-bottom: 25px;
+            text-align: left;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -132,6 +183,20 @@
                 <button onclick="setTab('tv')" id="btn-tv">Serie TV</button>
             </nav>
 
+            <!-- NUOVA ACTION BAR -->
+            <div class="quick-actions">
+                <button onclick="window.location.href='list.html'" class="quick-btn">
+                    <span style="font-size: 1.2em;">📋</span> Le Mie Liste
+                </button>
+                <button onclick="askGemini()" class="quick-btn gemini-btn">
+                    <span style="font-size: 1.2em;">✨</span> Consigli IA
+                </button>
+            </div>
+
+            <!-- CARD GEMINI -->
+            <div id="gemini-output" class="card gemini-card" style="display: none;"></div>
+
+            <!-- CARD QUIZ -->
             <div id="item-card" class="card">
                 <div id="loading" style="display: none;">Caricamento in corso...</div>
                 
@@ -149,7 +214,6 @@
                         <button onclick="rateItem(5, false)" title="Capolavoro">5</button>
                     </div>
                     
-                    <!-- Nuovo bottone Visto a metà -->
                     <button onclick="askPartialRating()" class="partial-btn" id="btn-partial" style="display:none;" title="Ho iniziato a vederlo ma l'ho abbandonato o non l'ho finito">
                         <span style="font-size:1.1em;">⏳</span> L'ho visto solo a metà / Abbandonato
                     </button>
@@ -159,21 +223,9 @@
                         <button onclick="skipItem()" class="btn-tertiary">Salta / Non so</button>
                     </div>
                     
-                    <!-- CTA per aggiungere alla Watchlist direttamente dal quiz -->
                     <button onclick="addCurrentToWatchlist()" class="btn-primary" style="background-color: var(--success-color); margin-top: 15px; font-size: 0.9em; padding: 10px;" title="Non l'hai visto ma ti ispira? Mettilo in coda!">
                         + Aggiungi a "Da Vedere" (Watchlist)
                     </button>
-                </div>
-
-                <div id="links-container">
-                    <a href="list.html" id="link-list" style="width: 100%; text-align: center;">📋 La Mia Lista Completa</a>
-                </div>
-
-                <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 25px 0;">
-
-                <div style="margin-top: 20px;">
-                    <button onclick="askGemini()" class="btn-primary" style="background-color: var(--gemini-color);">✨ Chiedi un Consiglio a Gemini ✨</button>
-                    <div id="gemini-output" class="recs-box" style="display: none;"></div>
                 </div>
             </div>
         </div>
