@@ -10,13 +10,18 @@
         const urlParams = new URLSearchParams(window.location.search);
         const ghToken = urlParams.get('gh');
         const gemKey = urlParams.get('gem');
+        const autoProfile = urlParams.get('p');
+
         if (ghToken && gemKey) {
             localStorage.setItem('gh_pat', ghToken);
             localStorage.setItem('gemini_key', gemKey);
+            if (autoProfile) {
+                localStorage.setItem('active_profile', autoProfile);
+            }
             window.history.replaceState({}, document.title, window.location.pathname);
         }
 
-        function generateMagicLink() {
+        function generateMagicLink(profileName) {
             const savedGh = localStorage.getItem('gh_pat');
             const savedGem = localStorage.getItem('gemini_key');
             if (!savedGh || !savedGem) {
@@ -26,8 +31,10 @@
             const url = new URL(window.location.href);
             url.searchParams.set('gh', savedGh);
             url.searchParams.set('gem', savedGem);
+            url.searchParams.set('p', profileName);
+            
             navigator.clipboard.writeText(url.toString()).then(() => {
-                alert("Magic Link copiato negli appunti!\nOra incollalo su WhatsApp o via mail a Michela. Quando lei ci cliccherà, accederà senza dover inserire nessuna password.");
+                alert(`Magic Link per ${profileName} copiato negli appunti!\nInvia o apri questo link sul dispositivo di ${profileName}, e farà il login automatico nel suo profilo senza chiedere nulla.`);
             });
         }
 
@@ -64,7 +71,7 @@
 </head>
 <body>
     <header>
-        <h1 style="cursor: pointer;" ondblclick="generateMagicLink()" title="Fai doppio clic qui per generare il Magic Link per Michela">🎬 Watchlist Akinator</h1>
+        <h1 style="cursor: pointer;" title="Watchlist Akinator">🎬 Watchlist Akinator</h1>
         <p>Valuta i titoli che hai visto per ottenere suggerimenti sempre migliori!</p>
     </header>
 
@@ -95,9 +102,11 @@
                     <h3>Michela</h3>
                 </div>
             </div>
-            <div style="margin-top: 25px;">
-                <button onclick="generateMagicLink()" class="btn-tertiary" style="font-size: 0.85em; padding: 8px 15px;">🔗 Genera Magic Link per Michela</button>
+            <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <button onclick="generateMagicLink('Simone')" class="btn-tertiary" style="font-size: 0.85em; padding: 8px 15px; width: auto;">🔗 Link per Simone</button>
+                <button onclick="generateMagicLink('Michela')" class="btn-tertiary" style="font-size: 0.85em; padding: 8px 15px; width: auto;">🔗 Link per Michela</button>
             </div>
+            <p style="font-size: 0.75em; color: var(--text-muted); margin-top: 15px;">Genera un link per configurare un altro telefono senza dover inserire la password.</p>
         </div>
 
         <!-- Area di Gioco (Akinator) -->

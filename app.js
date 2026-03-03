@@ -25,8 +25,10 @@ function b64EncodeUnicode(str) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Rileggiamo dal localStorage nel caso in cui il Magic Link li abbia appena settati
     GITHUB_TOKEN = localStorage.getItem('gh_pat');
     GEMINI_KEY = localStorage.getItem('gemini_key');
+    currentProfile = localStorage.getItem('active_profile');
 
     if (GITHUB_TOKEN && GEMINI_KEY) {
         document.getElementById('error-container').style.display = 'none';
