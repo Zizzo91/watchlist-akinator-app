@@ -4,11 +4,12 @@ let GITHUB_TOKEN = '';
 let GEMINI_TOKEN = '';
 
 let catalogData = { movies: [], tv: [] };
-let userData = { movies: { ratings: {}, asked: [] }, tv: { ratings: {}, asked: [] } };
+let userData = { movies: { ratings: {}, asked: [], watchlist: [] }, tv: { ratings: {}, asked: [], watchlist: [] } };
 let userdataSha = '';
 
 let currentTab = 'movies';
 let currentItem = null;
+let lastGeminiRecs = []; // Array per salvare temporaneamente i consigli prima del commit in watchlist
 
 function b64DecodeUnicode(str) {
     return decodeURIComponent(atob(str).split('').map(function(c) {
@@ -67,6 +68,7 @@ function setTab(tab) {
     document.getElementById('btn-movies').classList.toggle('active', tab === 'movies');
     document.getElementById('btn-tv').classList.toggle('active', tab === 'tv');
     document.getElementById('recs-output').style.display = 'none';
+    document.getElementById('save-recs-btn').style.display = 'none';
     renderNextItem();
 }
 
@@ -94,8 +96,10 @@ async function loadData() {
         userdataSha = userRes.sha;
         userData = JSON.parse(b64DecodeUnicode(userRes.content));
 
-        if(!userData.movies) userData.movies = { ratings: {}, asked: [] };
-        if(!userData.tv) userData.tv = { ratings: {}, asked: [] };
+        if(!userData.movies) userData.movies = { ratings: {}, asked: [], watchlist: [] };
+        if(!userData.tv) userData.tv = { ratings: {}, asked: [], watchlist: [] };
+        if(!userData.movies.watchlist) userData.movies.watchlist = [];
+        if(!userData.tv.watchlist) userData.tv.watchlist = [];
 
         renderNextItem();
     } catch (err) {
@@ -183,12 +187,14 @@ async function saveUserData() {
     }
 }
 
-// Integrazione API Google Gemini
+// Integrazione API Google Gemini JSON Mode
 async function generateGeminiRecommendations() {
     const recsBox = document.getElementById('recs-output');
     const loadingBox = document.getElementById('recs-loading');
+    const saveBtn = document.getElementById('save-recs-btn');
     
     recsBox.style.display = 'none';
+    saveBtn.style.display = 'none';
     loadingBox.style.display = 'block';
 
     const ratings = userData[currentTab].ratings;
@@ -196,16 +202,16 @@ async function generateGeminiRecommendations() {
     
     let loved = [];
     let disliked = [];
-    let notSeenIds = [];
+
+    // Crea elenchi anche con roba in watchlist per dirgli di non suggerirla
+    const existingWatchlistTitles = (userData[currentTab].watchlist || []).map(w => w.title);
 
     Object.keys(ratings).forEach(id => {
         const item = catalogData[currentTab].find(i => i.id == id);
         if(!item) return;
         
         const r = ratings[id];
-        if(r.seen === false) {
-            notSeenIds.push(id);
-        } else if(r.rating >= 4) {
+        if(r.rating >= 4) {
             loved.push(item.title);
         } else if(r.rating <= 2) {
             disliked.push(item.title);
@@ -220,20 +226,23 @@ async function generateGeminiRecommendations() {
     }
 
     const prompt = `
-Sei un esperto consigliere di ${typeLabel}. Basandoti su questi gusti dell'utente:
-- Titoli AMATI (4-5 stelle): ${loved.join(', ')}
-- Titoli NON PIACIUTI (1-2 stelle): ${disliked.length > 0 ? disliked.join(', ') : 'Nessuno finora'}
+Sei un esperto consigliere di ${typeLabel}. Basandoti su questi gusti:
+- Titoli AMATI: ${loved.join(', ')}
+- Titoli NON PIACIUTI: ${disliked.length > 0 ? disliked.join(', ') : 'Nessuno finora'}
+- GIA' NELLA WATCHLIST: ${existingWatchlistTitles.length > 0 ? existingWatchlistTitles.join(', ') : 'Nessuno'}
 
 Trova i 5 migliori ${typeLabel} che l'utente quasi certamente adorerà. 
-ATTENZIONE: NON proporre i titoli che sono già nell'elenco degli "AMATI" o "NON PIACIUTI".
-Considera le atmosfere, i registi, il ritmo narrativo e i generi dei titoli amati.
+NON PROPORRE ASSOLUTAMENTE i titoli che sono già negli elenchi "AMATI", "NON PIACIUTI" o "GIA' NELLA WATCHLIST".
 
-Per ogni consiglio, fornisci:
-1. Il titolo esatto
-2. L'anno di uscita
-3. Una breve motivazione personalizzata del PERCHÉ lo consigli, basata esplicitamente sui titoli che l'utente ha detto di amare.
-
-Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione.`;
+RESTITUISCI SOLO UN ARRAY JSON VALIDO (senza markdown blocks o backticks).
+Formato obbligatorio:
+[
+  {
+    "title": "Titolo Esatto del Film o Serie",
+    "year": 2023,
+    "reason": "Perché ha amato X e Y, questo thriller psicologico è perfetto..."
+  }
+]`;
 
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_TOKEN}`;
@@ -243,25 +252,67 @@ Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.7 }
+                generationConfig: { 
+                    temperature: 0.7,
+                    responseMimeType: "application/json" 
+                }
             })
         });
 
-        if(!response.ok) {
-            const errBody = await response.json();
-            throw new Error(errBody.error?.message || "Errore API Gemini");
-        }
+        if(!response.ok) throw new Error("Errore API Gemini");
 
         const data = await response.json();
-        const markdownResponse = data.candidates[0].content.parts[0].text;
+        const jsonText = data.candidates[0].content.parts[0].text;
         
-        recsBox.innerHTML = marked.parse(markdownResponse);
+        lastGeminiRecs = JSON.parse(jsonText);
+        
+        let htmlOutput = "<h3>🤖 L'IA ti consiglia:</h3><ul style='padding-left:20px;'>";
+        lastGeminiRecs.forEach(rec => {
+            htmlOutput += `<li style='margin-bottom: 10px;'>
+                <strong>${rec.title} (${rec.year})</strong><br>
+                <span style='color:#bbb; font-size:0.9em;'>${rec.reason}</span>
+            </li>`;
+        });
+        htmlOutput += "</ul>";
+        
+        recsBox.innerHTML = htmlOutput;
+        saveBtn.style.display = 'block'; // Mostra il bottone per salvare
 
     } catch (err) {
         console.error("Errore Gemini:", err);
-        recsBox.innerHTML = `<p style="color:red;"><strong>Errore API Gemini:</strong> ${err.message}</p> <p>Controlla che l'API Key sia corretta cliccando l'ingranaggio in alto a destra.</p>`;
+        recsBox.innerHTML = `<p style="color:red;"><strong>Errore:</strong> Impossibile generare consigli. Riprova.</p>`;
     } finally {
         loadingBox.style.display = 'none';
         recsBox.style.display = 'block';
     }
+}
+
+async function saveGeminiRecommendations() {
+    if(lastGeminiRecs.length === 0) return;
+    
+    const saveBtn = document.getElementById('save-recs-btn');
+    saveBtn.innerText = "⏳ Salvataggio in corso...";
+    saveBtn.disabled = true;
+
+    // Aggiungi all'array esistente della watchlist
+    const currentList = userData[currentTab].watchlist || [];
+    
+    lastGeminiRecs.forEach(rec => {
+        // Aggiungi timestamp e un ID fittizio generato dal titolo per sicurezza
+        currentList.push({
+            id: 'gemini_' + Date.now() + Math.floor(Math.random()*1000),
+            title: rec.title,
+            year: rec.year,
+            reason: rec.reason,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    userData[currentTab].watchlist = currentList;
+
+    await saveUserData();
+
+    saveBtn.innerText = "✅ Salvato in Watchlist!";
+    saveBtn.style.backgroundColor = "#1b5e20";
+    setTimeout(() => { saveBtn.style.display = 'none'; }, 3000);
 }

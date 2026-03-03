@@ -25,13 +25,12 @@
         </nav>
         
         <div id="links-container" style="display: none; justify-content: center; gap: 20px; margin-top: 15px; margin-bottom: 20px;">
-            <a href="list.html" style="color: var(--text-color); font-size: 0.9em;">📋 Vedi La Mia Lista</a>
+            <a href="list.html" style="color: var(--text-color); font-size: 0.9em;">📋 Vedi La Mia Lista / Watchlist</a>
             <a href="updater.html" style="color: var(--text-color); font-size: 0.9em;">⚙️ Aggiorna Catalogo (TMDB)</a>
         </div>
     </header>
 
     <main id="app-main" style="display: none;">
-        <!-- Sezione Domande (Akinator) -->
         <section id="quiz-section">
             <div id="loading" style="display: none;">Caricamento dati in corso...</div>
             <div id="card-container" class="card">
@@ -65,11 +64,10 @@
             <button onclick="generateGeminiRecommendations()" class="btn-primary" style="width:100%; background-color: #4a148c; font-size: 1.1em; padding: 12px;">✨ Chiedi a Gemini i tuoi prossimi titoli</button>
             <div id="recs-loading" style="display:none; margin-top: 15px; text-align: center;">🤖 L'IA sta pensando...</div>
             <div id="recs-output" class="recs-box" style="display:none; line-height: 1.5;"></div>
+            <button id="save-recs-btn" onclick="saveGeminiRecommendations()" class="btn-primary" style="display:none; width:100%; margin-top:10px; background-color: #2e7d32;">💾 Salva tutti in Watchlist</button>
         </section>
     </main>
 
-    <!-- Markdown Parser for Gemini output -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

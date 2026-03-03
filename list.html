@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>La Mia Lista - Watchlist Akinator</title>
+    <title>La Mia Lista & Watchlist</title>
     <link rel="stylesheet" href="style.css">
     <style>
         .list-container {
@@ -39,26 +39,50 @@
             min-width: 60px;
             text-align: right;
         }
+        .view-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            background: #222;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .view-toggle button {
+            background-color: transparent;
+            color: #aaa;
+            border: 1px solid #444;
+        }
+        .view-toggle button.active {
+            background-color: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
     </style>
 </head>
 <body>
     <header>
         <div style="display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto;">
-            <h1>📋 La Mia Lista</h1>
+            <h1>📋 I Miei Titoli</h1>
             <a href="index.html" style="color: white; text-decoration: none; border-bottom: 1px solid var(--accent-color);">← Torna al Quiz</a>
         </div>
         
         <nav id="app-nav" style="display: none; margin-top: 20px;">
-            <button onclick="setTab('movies')" id="btn-movies" class="active">🎬 Film Votati</button>
-            <button onclick="setTab('tv')" id="btn-tv">📺 Serie TV Votate</button>
+            <button onclick="setTab('movies')" id="btn-movies" class="active">🎬 Film</button>
+            <button onclick="setTab('tv')" id="btn-tv">📺 Serie TV</button>
         </nav>
+
+        <div class="view-toggle" id="view-toggle" style="display: none;">
+            <button onclick="setView('history')" id="btn-history" class="active">Votati (Storico)</button>
+            <button onclick="setView('watchlist')" id="btn-watchlist">Da Vedere (Watchlist AI)</button>
+        </div>
     </header>
 
     <main id="app-main" style="display: none; width: 100%; display: flex; flex-direction: column; align-items: center;">
-        <div id="loading" style="margin-top: 20px;">Caricamento lista...</div>
+        <div id="loading" style="margin-top: 20px;">Caricamento dati in corso...</div>
         <div id="empty-state" style="display: none; margin-top: 40px; text-align: center;">
-            <h2>Nessun titolo valutato in questa categoria.</h2>
-            <p>Torna alla Home per iniziare a valutare film e serie TV!</p>
+            <h2>Nessun titolo in questa sezione.</h2>
         </div>
         <div id="list-output" class="list-container"></div>
     </main>
