@@ -7,18 +7,32 @@
     <link rel="stylesheet" href="style.css">
     <style>
         .list-container {
-            max-width: 800px;
+            max-width: 1000px;
             width: 100%;
             margin: 10px auto 20px auto;
+            /* Layout a Griglia responsivo */
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            padding: 0 10px;
         }
+
         .list-item {
             display: flex;
             background: var(--card-bg);
             border-radius: 8px;
             padding: 10px;
-            margin-bottom: 10px;
             align-items: center;
+            /* Rimuove il margin-bottom perché ora usiamo il gap della griglia */
+            margin-bottom: 0;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
+        
+        .list-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
         .list-item img {
             width: 60px;
             height: 90px;
@@ -26,19 +40,56 @@
             margin-right: 15px;
             object-fit: cover;
         }
+
         .list-item-content {
             flex-grow: 1;
             text-align: left;
+            /* Previene che testi lunghi sformino la griglia */
+            overflow: hidden;
         }
-        .list-item h3 { margin: 0 0 5px 0; font-size: 1.1em; }
-        .list-item p { margin: 0; color: #aaa; font-size: 0.9em; }
+
+        .list-item h3 { 
+            margin: 0 0 5px 0; 
+            font-size: 1.05em; 
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .list-item p { 
+            margin: 0; 
+            color: #aaa; 
+            font-size: 0.85em; 
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .list-item-rating {
             font-size: 1.2em;
             font-weight: bold;
             color: #ffc107;
-            min-width: 60px;
+            min-width: 50px;
             text-align: right;
+            cursor: pointer;
         }
+
+        /* Stile specifico per i box della Watchlist (che hanno solo testo) */
+        .watchlist-item {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 15px;
+        }
+        .watchlist-item h3 {
+            white-space: normal;
+            word-break: break-word;
+        }
+        .watchlist-item p {
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+
         .view-toggle {
             display: flex;
             justify-content: center;
@@ -60,10 +111,11 @@
             border-color: var(--accent-color);
         }
         .search-container {
-            max-width: 800px;
+            max-width: 1000px;
             width: 100%;
             margin: 10px auto;
             display: none;
+            padding: 0 10px;
         }
         .search-container input {
             width: 100%;
@@ -83,9 +135,9 @@
 </head>
 <body>
     <header>
-        <div style="display: flex; justify-content: space-between; align-items: center; max-width: 800px; margin: 0 auto;">
-            <h1 id="profile-name-header">📋 La Mia Lista</h1>
-            <a href="index.html" style="color: white; text-decoration: none; border-bottom: 1px solid var(--accent-color);">← Torna al Quiz</a>
+        <div style="display: flex; justify-content: space-between; align-items: center; max-width: 1000px; margin: 0 auto; padding: 0 10px;">
+            <h1 id="profile-name-header" style="font-size: 1.5em; margin:0;">📋 La Mia Lista</h1>
+            <a href="index.html" style="color: white; text-decoration: none; border-bottom: 1px solid var(--accent-color); font-size: 0.9em;">← Torna al Quiz</a>
         </div>
         
         <nav id="app-nav" style="display: none; margin-top: 20px;">
@@ -93,7 +145,7 @@
             <button onclick="setTab('tv')" id="btn-tv">📺 Serie TV</button>
         </nav>
 
-        <div class="view-toggle" id="view-toggle" style="display: none;">
+        <div class="view-toggle" id="view-toggle" style="display: none; max-width: 1000px; margin: 20px auto 10px auto;">
             <button onclick="setView('history')" id="btn-history" class="active">Votati (Storico)</button>
             <button onclick="setView('watchlist')" id="btn-watchlist">Da Vedere (Watchlist)</button>
         </div>

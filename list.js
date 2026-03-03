@@ -110,7 +110,7 @@ async function changeRating(itemId) {
     
     const newRatingStr = prompt(`Inserisci il nuovo voto per questo titolo (da 1 a 5):\nAttuale: ${currentEntry.rating}⭐${isPartialStr}`, currentEntry.rating);
     
-    if (newRatingStr === null) return; // l'utente ha premuto annulla
+    if (newRatingStr === null) return; 
     
     const newRating = parseInt(newRatingStr);
     if (isNaN(newRating) || newRating < 1 || newRating > 5) {
@@ -118,11 +118,10 @@ async function changeRating(itemId) {
         return;
     }
 
-    // Se stiamo modificando la serie, chiediamo anche se è ancora abbandonata o l'ha finita
     let newPartial = currentEntry.partial || false;
     if(currentTab === 'tv') {
         const confirmPartial = confirm(`Hai completato la visione di questa serie?\n[OK] = Sì, l'ho finita\n[Annulla] = No, l'ho abbandonata a metà`);
-        newPartial = !confirmPartial; // se preme OK, partial diventa false. Se Annulla, partial diventa true
+        newPartial = !confirmPartial; 
     }
 
     userData[currentTab].ratings[itemId].rating = newRating;
@@ -204,19 +203,19 @@ function renderList() {
         ratedItems.forEach(item => {
             const div = document.createElement('div');
             div.className = 'list-item';
+            div.title = item.title; // Mostra il titolo completo passando col mouse se viene tagliato
             const poster = item.poster || 'https://via.placeholder.com/60x90?text=No+Poster';
             
-            // Etichetta "Abbandonata" se salvata come partial
-            const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 6px; border-radius: 4px; border: 1px solid #ff9800; margin-left: 8px; vertical-align: middle;">⏳ A metà</span>` : '';
+            const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 4px; border-radius: 4px; border: 1px solid #ff9800; margin-left: 4px; vertical-align: middle;">⏳ A metà</span>` : '';
             
             div.innerHTML = `
-                <img src="${poster}" alt="${item.title}">
+                <img src="${poster}" alt="Poster">
                 <div class="list-item-content">
                     <h3>${item.title} (${item.year}) ${partialBadge}</h3>
                     <p>${(item.genres || []).join(', ')}</p>
-                    <p style="font-size:0.8em; margin-top:4px;">Su: ${(item.platforms || []).join(', ')}</p>
+                    <p style="font-size:0.8em; margin-top:4px; color:#888;">Su: ${(item.platforms || []).join(', ')}</p>
                 </div>
-                <div class="list-item-rating editable-rating" onclick="changeRating(${item.id})" title="Clicca per modificare il voto">
+                <div class="list-item-rating" onclick="changeRating(${item.id})" title="Clicca per modificare il voto">
                     ${item.rating} ⭐
                 </div>
             `;
@@ -245,13 +244,11 @@ function renderList() {
         
         reversedList.forEach(item => {
             const div = document.createElement('div');
-            div.className = 'list-item';
-            div.style.flexDirection = 'column';
-            div.style.alignItems = 'flex-start';
+            div.className = 'list-item watchlist-item';
             
             div.innerHTML = `
-                <h3 style="color: var(--accent-color); margin-bottom: 5px;">${item.title} (${item.year})</h3>
-                <p style="color: #ddd; font-style: italic;">"${item.reason}"</p>
+                <h3 style="color: var(--accent-color); margin-bottom: 5px; font-size: 1.1em;">${item.title} (${item.year})</h3>
+                <p style="color: #ddd; font-style: italic; font-size: 0.9em;">"${item.reason}"</p>
             `;
             listOutput.appendChild(div);
         });
