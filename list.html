@@ -10,7 +10,6 @@
             max-width: 1000px;
             width: 100%;
             margin: 10px auto 20px auto;
-            /* Layout a Griglia responsivo */
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 15px;
@@ -23,7 +22,6 @@
             border-radius: 8px;
             padding: 10px;
             align-items: center;
-            /* Rimuove il margin-bottom perché ora usiamo il gap della griglia */
             margin-bottom: 0;
             transition: transform 0.2s, box-shadow 0.2s;
         }
@@ -44,7 +42,6 @@
         .list-item-content {
             flex-grow: 1;
             text-align: left;
-            /* Previene che testi lunghi sformino la griglia */
             overflow: hidden;
         }
 
@@ -74,7 +71,6 @@
             cursor: pointer;
         }
 
-        /* Stile specifico per i box della Watchlist (che hanno solo testo) */
         .watchlist-item {
             flex-direction: column;
             align-items: flex-start;
@@ -150,8 +146,14 @@
             <button onclick="setView('watchlist')" id="btn-watchlist">Da Vedere (Watchlist)</button>
         </div>
         
+        <!-- Riga di ricerca con pulsante Aggiungi Manuale -->
         <div class="search-container" id="search-container">
-            <input type="text" id="search-input" placeholder="Cerca titolo, genere o piattaforma..." onkeyup="filterList()">
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="search-input" placeholder="Cerca titolo, genere o piattaforma..." onkeyup="filterList()">
+                <button onclick="askManualAdd()" class="btn-primary" style="white-space: nowrap; width: auto; padding: 0 15px; font-size:0.9em; margin:0;" title="Aggiungi un titolo che non ti è uscito nel quiz">
+                    + Aggiungi
+                </button>
+            </div>
         </div>
     </header>
 

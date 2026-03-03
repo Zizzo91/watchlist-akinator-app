@@ -74,6 +74,8 @@ async function loadData() {
         
         if(!userData.movies.watchlist) userData.movies.watchlist = [];
         if(!userData.tv.watchlist) userData.tv.watchlist = [];
+        if(!userData.movies.manual_queue) userData.movies.manual_queue = [];
+        if(!userData.tv.manual_queue) userData.tv.manual_queue = [];
         
         renderList();
 
@@ -102,6 +104,36 @@ function setView(view) {
 function filterList() {
     searchQuery = document.getElementById('search-input').value.toLowerCase();
     renderList();
+}
+
+async function askManualAdd() {
+    const typeLabel = currentTab === 'movies' ? 'del Film' : 'della Serie TV';
+    const title = prompt(`Inserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere manualmente:`);
+    if (!title || !title.trim()) return;
+
+    const ratingStr = prompt(`Che voto dai a "${title.trim()}"? (da 1 a 5)`);
+    if (!ratingStr) return;
+
+    const rating = parseInt(ratingStr);
+    if (isNaN(rating) || rating < 1 || rating > 5) {
+        alert("Devi inserire un numero tra 1 e 5.");
+        return;
+    }
+
+    if (!userData[currentTab].manual_queue) {
+        userData[currentTab].manual_queue = [];
+    }
+
+    userData[currentTab].manual_queue.push({
+        title: title.trim(),
+        rating: rating,
+        addedAt: new Date().toISOString()
+    });
+
+    renderList(); // Aggiorna subito la UI visivamente
+    await saveUserData();
+    
+    alert(`"${title.trim()}" inserito in coda con successo!\n\nL'algoritmo andrà a cercare il poster e le info ufficiali su TMDB stanotte e domani lo vedrai completato nella tua lista.`);
 }
 
 async function changeRating(itemId) {
@@ -143,7 +175,7 @@ async function saveUserData() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: `Update rating/list for ${currentProfile}`,
+                message: `Update user data / queue for ${currentProfile}`,
                 content: content,
                 sha: userdataSha
             })
@@ -154,7 +186,7 @@ async function saveUserData() {
         userdataSha = data.content.sha;
     } catch (err) {
         console.error("Salvataggio fallito:", err);
-        alert("Si è verificato un errore nel salvataggio del nuovo voto su GitHub.");
+        alert("Si è verificato un errore nel salvataggio dei dati su GitHub.");
     }
 }
 
@@ -168,19 +200,34 @@ function renderList() {
         const ratings = userData[currentTab]?.ratings || {};
         const items = catalogData[currentTab] || [];
         
+        // Elementi votati e validati (con ID TMDB)
         let ratedItems = Object.keys(ratings)
             .filter(id => ratings[id].seen === true)
             .map(id => {
                 const catalogItem = items.find(i => i.id == id);
                 return {
                     ...catalogItem,
+                    id: id,
                     rating: ratings[id].rating,
                     partial: ratings[id].partial,
                     timestamp: ratings[id].timestamp
                 };
             })
-            .filter(i => i.title);
+            .filter(i => i.title); // rimuove quelli non trovati nel catalogo
             
+        // Elementi in coda aggiunti manualmente ma non ancora scansionati
+        let manualItems = (userData[currentTab]?.manual_queue || []).map(item => ({
+            id: 'manual', // finto ID
+            title: item.title,
+            year: '⏳ Ricerca...',
+            genres: ['In attesa del Server'],
+            platforms: [],
+            rating: item.rating,
+            poster: 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3',
+            isManual: true,
+            timestamp: item.addedAt
+        }));
+
         if (searchQuery) {
             ratedItems = ratedItems.filter(item => 
                 item.title.toLowerCase().includes(searchQuery) ||
@@ -188,11 +235,15 @@ function renderList() {
                 (item.platforms && item.platforms.some(p => p.toLowerCase().includes(searchQuery))) ||
                 (item.year && item.year.toString().includes(searchQuery))
             );
+            manualItems = manualItems.filter(item => item.title.toLowerCase().includes(searchQuery));
         }
 
         ratedItems.sort((a, b) => b.rating - a.rating || new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Uniamo le due liste (mettiamo i manuali in cima)
+        const combinedList = [...manualItems, ...ratedItems];
 
-        if (ratedItems.length === 0) {
+        if (combinedList.length === 0) {
             emptyState.style.display = 'block';
             emptyText.innerHTML = searchQuery ? "Nessun titolo trovato per la tua ricerca." : "Non hai ancora valutato nessun titolo in questa categoria.";
             return;
@@ -200,22 +251,27 @@ function renderList() {
 
         emptyState.style.display = 'none';
         
-        ratedItems.forEach(item => {
+        combinedList.forEach(item => {
             const div = document.createElement('div');
             div.className = 'list-item';
-            div.title = item.title; // Mostra il titolo completo passando col mouse se viene tagliato
+            div.title = item.title; 
             const poster = item.poster || 'https://via.placeholder.com/60x90?text=No+Poster';
             
             const partialBadge = item.partial ? `<span style="background: rgba(255,152,0,0.2); color: #ffb74d; font-size:0.7em; padding: 2px 4px; border-radius: 4px; border: 1px solid #ff9800; margin-left: 4px; vertical-align: middle;">⏳ A metà</span>` : '';
             
+            // Per i manuali, blocchiamo il click sul voto perché l'ID è fasullo
+            const ratingClick = item.isManual ? '' : `onclick="changeRating(${item.id})"`;
+            const ratingClass = item.isManual ? '' : 'editable-rating';
+            const ratingTitle = item.isManual ? 'In attesa di scansione...' : 'Clicca per modificare il voto';
+
             div.innerHTML = `
                 <img src="${poster}" alt="Poster">
                 <div class="list-item-content">
-                    <h3>${item.title} (${item.year}) ${partialBadge}</h3>
-                    <p>${(item.genres || []).join(', ')}</p>
-                    <p style="font-size:0.8em; margin-top:4px; color:#888;">Su: ${(item.platforms || []).join(', ')}</p>
+                    <h3>${item.title} ${item.year !== '⏳ Ricerca...' ? `(${item.year})` : ''} ${partialBadge}</h3>
+                    <p style="color: ${item.isManual ? '#ffb74d' : '#aaa'}">${(item.genres || []).join(', ')}</p>
+                    <p style="font-size:0.8em; margin-top:4px; color:#888;">${item.platforms.length > 0 ? 'Su: ' + item.platforms.join(', ') : item.year}</p>
                 </div>
-                <div class="list-item-rating" onclick="changeRating(${item.id})" title="Clicca per modificare il voto">
+                <div class="list-item-rating ${ratingClass}" ${ratingClick} title="${ratingTitle}">
                     ${item.rating} ⭐
                 </div>
             `;
