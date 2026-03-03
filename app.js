@@ -93,7 +93,6 @@ async function loadData() {
         userdataSha = userRes.sha;
         userData = JSON.parse(b64DecodeUnicode(userRes.content));
 
-        // Inizializza chiavi se mancano dal JSON salvato
         if(!userData.movies) userData.movies = { ratings: {}, asked: [] };
         if(!userData.tv) userData.tv = { ratings: {}, asked: [] };
 
@@ -138,8 +137,8 @@ async function rateItem(stars) {
     if(!currentItem) return;
     userData[currentTab].ratings[currentItem.id] = { rating: stars, seen: true, timestamp: new Date().toISOString() };
     userData[currentTab].asked.push(currentItem.id);
-    renderNextItem(); // Avanti istantaneo
-    await saveUserData(); // Salva in background
+    renderNextItem();
+    await saveUserData();
 }
 
 async function markNotSeen() {
@@ -235,7 +234,8 @@ Per ogni consiglio, fornisci:
 Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione.`;
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_TOKEN}`;
+        // Aggiornato il nome del modello a gemini-1.5-flash-latest per compatibilità
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_TOKEN}`;
         
         const response = await fetch(url, {
             method: 'POST',
