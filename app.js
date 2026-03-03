@@ -1,6 +1,7 @@
 const REPO_OWNER = 'Zizzo91';
 const DATA_REPO = 'my-watchlist-data';
 let GITHUB_TOKEN = '';
+let GEMINI_TOKEN = '';
 
 let catalogData = { movies: [], tv: [] };
 let userData = { movies: { ratings: {}, asked: [] }, tv: { ratings: {}, asked: [] } };
@@ -9,14 +10,12 @@ let userdataSha = '';
 let currentTab = 'movies';
 let currentItem = null;
 
-// Utility per decodificare il Base64 di GitHub (che gestisce male l'UTF-8 nativo)
 function b64DecodeUnicode(str) {
     return decodeURIComponent(atob(str).split('').map(function(c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
 }
 
-// Utility per codificare in Base64 (supporto UTF-8)
 function b64EncodeUnicode(str) {
     return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
         function toSolidBytes(match, p1) {
@@ -25,18 +24,27 @@ function b64EncodeUnicode(str) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const savedToken = localStorage.getItem('gh_pat');
-    if (savedToken) {
-        document.getElementById('gh-token').value = savedToken;
-        saveToken();
+    const savedGhToken = localStorage.getItem('gh_pat');
+    const savedGeminiToken = localStorage.getItem('gemini_token');
+    
+    if (savedGhToken) document.getElementById('gh-token').value = savedGhToken;
+    if (savedGeminiToken) document.getElementById('gemini-token').value = savedGeminiToken;
+    
+    if (savedGhToken && savedGeminiToken) {
+        saveTokens();
     }
 });
 
-async function saveToken() {
+async function saveTokens() {
     GITHUB_TOKEN = document.getElementById('gh-token').value.trim();
-    if (!GITHUB_TOKEN) return alert('Inserisci il token!');
+    GEMINI_TOKEN = document.getElementById('gemini-token').value.trim();
+    
+    if (!GITHUB_TOKEN) return alert('Inserisci il token di GitHub!');
+    if (!GEMINI_TOKEN) return alert('Inserisci la chiave API di Gemini!');
     
     localStorage.setItem('gh_pat', GITHUB_TOKEN);
+    localStorage.setItem('gemini_token', GEMINI_TOKEN);
+    
     document.getElementById('auth-container').style.display = 'none';
     document.getElementById('app-nav').style.display = 'flex';
     document.getElementById('app-main').style.display = 'block';
@@ -57,7 +65,8 @@ async function fetchFromGitHub(path) {
         headers: {
             'Authorization': `Bearer ${GITHUB_TOKEN}`,
             'Accept': 'application/vnd.github.v3+json'
-        }
+        },
+        cache: 'no-store'
     });
     if (!response.ok) throw new Error(`Errore fetch ${path}: ${response.statusText}`);
     return response.json();
@@ -68,18 +77,20 @@ async function loadData() {
     document.getElementById('card-container').style.display = 'none';
 
     try {
-        // Carica Catalogo
         const catalogRes = await fetchFromGitHub('catalog.json');
         catalogData = JSON.parse(b64DecodeUnicode(catalogRes.content));
 
-        // Carica Dati Utente
         const userRes = await fetchFromGitHub('userdata.json');
         userdataSha = userRes.sha;
         userData = JSON.parse(b64DecodeUnicode(userRes.content));
 
+        // Inizializza chiavi se mancano dal JSON salvato
+        if(!userData.movies) userData.movies = { ratings: {}, asked: [] };
+        if(!userData.tv) userData.tv = { ratings: {}, asked: [] };
+
         renderNextItem();
     } catch (err) {
-        alert("Errore nel caricamento dei dati. Controlla il Token PAT e i permessi del repo 'my-watchlist-data'.");
+        alert("Errore nel caricamento dei dati. Assicurati che i token siano corretti e che catalog.json esista.");
         console.error(err);
         document.getElementById('auth-container').style.display = 'block';
         document.getElementById('app-nav').style.display = 'none';
@@ -90,10 +101,9 @@ async function loadData() {
 }
 
 function renderNextItem() {
-    const items = catalogData[currentTab];
+    const items = catalogData[currentTab] || [];
     const asked = userData[currentTab].asked || [];
     
-    // Trova il primo elemento non ancora chiesto
     currentItem = items.find(item => !asked.includes(item.id));
 
     if (!currentItem) {
@@ -105,50 +115,40 @@ function renderNextItem() {
     document.getElementById('card-container').style.display = 'block';
     document.getElementById('no-more-items').style.display = 'none';
 
-    document.getElementById('item-poster').src = currentItem.poster;
+    const posterUrl = currentItem.poster || 'https://via.placeholder.com/300x450?text=No+Poster';
+    document.getElementById('item-poster').src = posterUrl;
     document.getElementById('item-title').textContent = currentItem.title;
-    document.getElementById('item-details').textContent = 
-        `${currentItem.year} | ${currentItem.genres.join(', ')} | ${currentItem.platforms.join(', ')}`;
+    
+    const genres = (currentItem.genres || []).join(', ');
+    const platforms = (currentItem.platforms || []).join(', ');
+    document.getElementById('item-details').textContent = `${currentItem.year} | ${genres} | ${platforms}`;
 }
 
 async function rateItem(stars) {
     if(!currentItem) return;
-    
-    userData[currentTab].ratings[currentItem.id] = {
-        rating: stars,
-        seen: true,
-        timestamp: new Date().toISOString()
-    };
+    userData[currentTab].ratings[currentItem.id] = { rating: stars, seen: true, timestamp: new Date().toISOString() };
     userData[currentTab].asked.push(currentItem.id);
-    
-    await saveUserData();
-    renderNextItem();
+    renderNextItem(); // Avanti istantaneo
+    await saveUserData(); // Salva in background
 }
 
 async function markNotSeen() {
     if(!currentItem) return;
-    
-    userData[currentTab].ratings[currentItem.id] = {
-        seen: false,
-        timestamp: new Date().toISOString()
-    };
+    userData[currentTab].ratings[currentItem.id] = { seen: false, timestamp: new Date().toISOString() };
     userData[currentTab].asked.push(currentItem.id);
-    
-    await saveUserData();
     renderNextItem();
+    await saveUserData();
 }
 
 async function skipItem() {
     if(!currentItem) return;
-    // Lo inseriamo nei chiesti per non mostrarlo subito, ma senza rating
     userData[currentTab].asked.push(currentItem.id);
-    await saveUserData();
     renderNextItem();
+    await saveUserData();
 }
 
 async function saveUserData() {
     const content = b64EncodeUnicode(JSON.stringify(userData, null, 2));
-    
     try {
         const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
             method: 'PUT',
@@ -158,56 +158,102 @@ async function saveUserData() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: "Update user ratings via Web App",
+                message: "Akinator: Update user progress",
                 content: content,
                 sha: userdataSha
             })
         });
         
-        if (!response.ok) throw new Error('Errore nel salvataggio');
+        if (!response.ok) throw new Error('Errore nel salvataggio su GitHub');
         const data = await response.json();
-        userdataSha = data.content.sha; // Aggiorna lo SHA per la prossima scrittura
+        userdataSha = data.content.sha;
     } catch (err) {
         console.error("Salvataggio fallito:", err);
-        alert("Errore nel salvataggio su GitHub. Controlla la console.");
     }
 }
 
-// Logica locale basilare per i consigli (MVP senza API Gemini per ora)
-function generateRecommendations() {
-    const ratings = userData[currentTab].ratings;
-    const topRatedIds = Object.keys(ratings).filter(id => ratings[id].rating >= 4);
-    
+// Integrazione API Google Gemini
+async function generateGeminiRecommendations() {
     const recsBox = document.getElementById('recs-output');
-    recsBox.style.display = 'block';
+    const loadingBox = document.getElementById('recs-loading');
     
-    if (topRatedIds.length === 0) {
-        recsBox.innerHTML = "<p>Valuta qualche titolo con 4 o 5 stelle prima di chiedere consigli!</p>";
-        return;
-    }
+    recsBox.style.display = 'none';
+    loadingBox.style.display = 'block';
 
-    // Identifica i generi preferiti dai top rated
-    let favoriteGenres = {};
-    topRatedIds.forEach(id => {
+    const ratings = userData[currentTab].ratings;
+    const typeLabel = currentTab === 'movies' ? 'film' : 'serie TV';
+    
+    // Trova i preferiti (4-5 stelle), quelli non piaciuti (1-2 stelle) e quelli non visti
+    let loved = [];
+    let disliked = [];
+    let notSeenIds = [];
+
+    Object.keys(ratings).forEach(id => {
         const item = catalogData[currentTab].find(i => i.id == id);
-        if(item) {
-            item.genres.forEach(g => {
-                favoriteGenres[g] = (favoriteGenres[g] || 0) + 1;
-            });
+        if(!item) return;
+        
+        const r = ratings[id];
+        if(r.seen === false) {
+            notSeenIds.push(id);
+        } else if(r.rating >= 4) {
+            loved.push(item.title);
+        } else if(r.rating <= 2) {
+            disliked.push(item.title);
         }
     });
 
-    const topGenres = Object.entries(favoriteGenres)
-        .sort((a,b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(e => e[0]);
+    if (loved.length === 0) {
+        loadingBox.style.display = 'none';
+        recsBox.style.display = 'block';
+        recsBox.innerHTML = `<p>Devi valutare almeno un paio di ${typeLabel} con 4 o 5 stelle prima di poter chiedere consigli all'IA!</p>`;
+        return;
+    }
 
-    // Testo pronto da inviare a Gemini (o mostrato in locale)
-    let promptText = `Ho valutato molto positivamente titoli che includono generi come: ${topGenres.join(', ')}.\n`;
-    promptText += "In futuro qui ci sarà la risposta dell'intelligenza artificiale (Gemini) integrando le sue API.";
+    // Costruzione del prompt per Gemini
+    const prompt = `
+Sei un esperto consigliere di ${typeLabel}. Basandoti su questi gusti dell'utente:
+- Titoli AMATI (4-5 stelle): ${loved.join(', ')}
+- Titoli NON PIACIUTI (1-2 stelle): ${disliked.length > 0 ? disliked.join(', ') : 'Nessuno finora'}
 
-    recsBox.innerHTML = `<h3>I tuoi gusti (Logica base)</h3>
-                         <p>I tuoi generi preferiti sembrano essere: <strong>${topGenres.join(', ')}</strong>.</p>
-                         <hr>
-                         <p><em>Prossimo step: Inviare questi dati a Gemini per farsi generare 5 titoli non visti sulle piattaforme che possiedi!</em></p>`;
+Trova i 5 migliori ${typeLabel} che l'utente quasi certamente adorerà. 
+ATTENZIONE: NON proporre i titoli che sono già nell'elenco degli "AMATI" o "NON PIACIUTI".
+Considera le atmosfere, i registi, il ritmo narrativo e i generi dei titoli amati.
+
+Per ogni consiglio, fornisci:
+1. Il titolo esatto
+2. L'anno di uscita
+3. Una breve motivazione personalizzata del PERCHÉ lo consigli, basata esplicitamente sui titoli che l'utente ha detto di amare.
+
+Rispondi in Markdown pulito, usando "### Titolo (Anno)" per ogni raccomandazione.`;
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_TOKEN}`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.7 }
+            })
+        });
+
+        if(!response.ok) {
+            const errBody = await response.json();
+            throw new Error(errBody.error?.message || "Errore sconosciuto Gemini");
+        }
+
+        const data = await response.json();
+        const markdownResponse = data.candidates[0].content.parts[0].text;
+        
+        // Usa libreria "marked" importata nell'HTML per convertire Markdown in HTML
+        recsBox.innerHTML = marked.parse(markdownResponse);
+
+    } catch (err) {
+        console.error("Errore Gemini:", err);
+        recsBox.innerHTML = `<p style="color:red;"><strong>Errore API Gemini:</strong> ${err.message}</p> <p>Assicurati che la chiave API sia valida.</p>`;
+    } finally {
+        loadingBox.style.display = 'none';
+        recsBox.style.display = 'block';
+    }
 }

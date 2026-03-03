@@ -10,9 +10,11 @@
     <header>
         <h1>🍿 Watchlist Akinator</h1>
         <div id="auth-container">
-            <input type="password" id="gh-token" placeholder="Inserisci il tuo GitHub PAT (Classic o Fine-grained)">
-            <button onclick="saveToken()">Salva e Avvia</button>
-            <p class="small-text">Il token resta salvato solo nel tuo browser e serve per leggere/scrivere nel repo privato "my-watchlist-data".</p>
+            <input type="password" id="gh-token" placeholder="Inserisci il tuo GitHub PAT (per salvare i dati)">
+            <input type="password" id="gemini-token" placeholder="Inserisci la tua API Key di Google Gemini" style="margin-top: 10px;">
+            <button onclick="saveTokens()" style="margin-top: 15px;">Salva e Avvia</button>
+            <p class="small-text">I token restano salvati solo nel tuo browser.</p>
+            <p class="small-text"><a href="updater.html" style="color: var(--accent-color);">Vai all'Updater TMDB →</a></p>
         </div>
         <nav id="app-nav" style="display: none;">
             <button onclick="setTab('movies')" id="btn-movies" class="active">🎬 Film</button>
@@ -50,13 +52,16 @@
             </div>
         </section>
 
-        <!-- Pulsante per la logica di Consigli (MVP) -->
+        <!-- Pulsante per la logica di Consigli con Gemini -->
         <section id="recommendations-section" class="mt-2">
-            <button onclick="generateRecommendations()" class="btn-primary" style="width:100%">💡 Genera Consigli (Logica Locale)</button>
-            <div id="recs-output" class="recs-box" style="display:none;"></div>
+            <button onclick="generateGeminiRecommendations()" class="btn-primary" style="width:100%; background-color: #4a148c;">✨ Chiedi a Gemini i tuoi prossimi titoli</button>
+            <div id="recs-loading" style="display:none; margin-top: 15px; text-align: center;">🤖 L'IA sta pensando...</div>
+            <div id="recs-output" class="recs-box" style="display:none; line-height: 1.5;"></div>
         </section>
     </main>
 
+    <!-- Markdown Parser for Gemini output -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
