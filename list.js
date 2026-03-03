@@ -134,9 +134,27 @@ async function askManualAdd() {
         if (!ratingStr) return;
         const rating = parseInt(ratingStr);
         if (isNaN(rating) || rating < 1 || rating > 5) return alert("Devi inserire un numero tra 1 e 5.");
-        userData[currentTab].manual_queue.push({ title: title.trim(), rating: rating, addedAt: new Date().toISOString() });
+        
+        let isPartial = false;
+        let isOngoing = false;
+        
+        if (currentTab === 'tv') {
+            isPartial = confirm(`Hai ABBANDONATO "${title.trim()}" a metà?\n[OK] = Sì, l'ho abbandonata\n[Annulla] = No, l'ho finita/sono in pari`);
+            if (!isPartial) {
+                isOngoing = confirm(`La serie "${title.trim()}" è IN CORSO (sei in attesa di nuove stagioni)?\n[OK] = Sì, attendo altre stagioni\n[Annulla] = No, è conclusa definitivamente`);
+            }
+        }
+        
+        userData[currentTab].manual_queue.push({ 
+            title: title.trim(), 
+            rating: rating, 
+            partial: isPartial,
+            ongoing: isOngoing,
+            addedAt: new Date().toISOString() 
+        });
+        
         renderList(); await saveUserData();
-        alert(`"${title.trim()}" inserito in coda!`);
+        alert(`"${title.trim()}" inserito nello storico!`);
     } else {
         const title = prompt(`DA VEDERE (WATCHLIST):\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere:`);
         if (!title || !title.trim()) return;
@@ -164,16 +182,23 @@ async function markWatchlistAsSeen(title, itemId) {
     if (!ratingStr) return;
     const rating = parseInt(ratingStr);
     if (isNaN(rating) || rating < 1 || rating > 5) return alert("Inserisci un numero valido da 1 a 5.");
+    
     let isPartial = false;
-    if(currentTab === 'tv') isPartial = !confirm(`Hai completato la visione di questa serie?\n[OK] = Sì, l'ho finita/in pari\n[Annulla] = L'ho abbandonata a metà`);
+    let isOngoing = false;
+    if(currentTab === 'tv') {
+        isPartial = confirm(`Hai ABBANDONATO la visione a metà?\n[OK] = Sì, abbandonata\n[Annulla] = No, finita/in pari`);
+        if(!isPartial) {
+            isOngoing = confirm(`La serie è IN CORSO (attendi nuove stagioni)?\n[OK] = Sì\n[Annulla] = No, conclusa`);
+        }
+    }
     
     userData[currentTab].watchlist = userData[currentTab].watchlist.filter(item => item.title !== title);
     if (itemId) {
         if (!userData[currentTab].ratings) userData[currentTab].ratings = {};
-        userData[currentTab].ratings[itemId] = { rating: rating, seen: true, partial: isPartial, ongoing: false, timestamp: new Date().toISOString() };
+        userData[currentTab].ratings[itemId] = { rating: rating, seen: true, partial: isPartial, ongoing: isOngoing, timestamp: new Date().toISOString() };
         if (!userData[currentTab].asked.includes(itemId)) userData[currentTab].asked.push(itemId);
     } else {
-        userData[currentTab].manual_queue.push({ title: title, rating: rating, addedAt: new Date().toISOString() });
+        userData[currentTab].manual_queue.push({ title: title, rating: rating, partial: isPartial, ongoing: isOngoing, addedAt: new Date().toISOString() });
     }
     renderList(); await saveUserData();
     alert(`"${title}" spostato nello Storico con voto ${rating}⭐!`);
@@ -201,7 +226,7 @@ async function togglePartialStatus(itemId) {
         alert("Stato aggiornato: Serie segnata come COMPLETATA / IN PARI! ✅");
     } else {
         item.partial = true;
-        item.ongoing = false; // Se l'abbandoni, non stai più aspettando stagioni
+        item.ongoing = false; 
         alert("Stato aggiornato: Serie segnata come ABBANDONATA / A METÀ! ⏳");
     }
     item.timestamp = new Date().toISOString();
@@ -214,7 +239,7 @@ async function toggleOngoingStatus(itemId) {
     
     item.ongoing = !item.ongoing;
     if (item.ongoing) {
-        item.partial = false; // Se sei in attesa di stagioni, sei "in pari", non l'hai abbandonata
+        item.partial = false; 
         alert("Stato aggiornato: Serie segnata come 'IN CORSO'. Sei in pari e attendi nuove stagioni! 🔄");
     } else {
         alert("Stato aggiornato: Serie segnata come CONCLUSIVA/FINITA! 🎬");
@@ -258,7 +283,7 @@ function renderList() {
         }).filter(i => i.title); 
             
         let manualItems = (userData[currentTab]?.manual_queue || []).map(item => ({
-            id: 'manual', title: item.title, year: '⏳ Ricerca...', genres: ['In attesa'], platforms: [], rating: item.rating, poster: 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3', isManual: true, timestamp: item.addedAt
+            id: 'manual', title: item.title, year: '⏳ Ricerca...', genres: ['In attesa'], platforms: [], rating: item.rating, partial: item.partial || false, ongoing: item.ongoing || false, poster: 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3', isManual: true, timestamp: item.addedAt
         }));
 
         if (searchQuery) {
@@ -268,12 +293,18 @@ function renderList() {
         if (filterGenre) ratedItems = ratedItems.filter(item => item.genres && item.genres.includes(filterGenre));
         if (filterPlatform) ratedItems = ratedItems.filter(item => item.platforms && item.platforms.includes(filterPlatform));
         if (filterRating) {
-            if (filterRating === 'partial') ratedItems = ratedItems.filter(item => item.partial === true);
-            else if (filterRating === 'ongoing') ratedItems = ratedItems.filter(item => item.ongoing === true);
+            if (filterRating === 'partial') {
+                ratedItems = ratedItems.filter(item => item.partial === true);
+                manualItems = manualItems.filter(item => item.partial === true);
+            }
+            else if (filterRating === 'ongoing') {
+                ratedItems = ratedItems.filter(item => item.ongoing === true);
+                manualItems = manualItems.filter(item => item.ongoing === true);
+            }
             else {
                 const r = parseInt(filterRating);
                 ratedItems = ratedItems.filter(item => item.rating === r && !item.partial && !item.ongoing);
-                manualItems = manualItems.filter(item => item.rating === r);
+                manualItems = manualItems.filter(item => item.rating === r && !item.partial && !item.ongoing);
             }
         }
 
