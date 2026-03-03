@@ -4,8 +4,9 @@ let GITHUB_TOKEN = localStorage.getItem('gh_pat');
 
 let catalogData = { movies: [], tv: [] };
 let userData = { movies: { ratings: {}, asked: [], watchlist: [] }, tv: { ratings: {}, asked: [], watchlist: [] } };
+let userdataSha = '';
 let currentTab = 'movies';
-let currentView = 'history'; // history | watchlist
+let currentView = 'history';
 
 function b64DecodeUnicode(str) {
     return decodeURIComponent(atob(str).split('').map(function(c) {
@@ -13,9 +14,7 @@ function b64DecodeUnicode(str) {
     }).join(''));
 }
 
-async function b64EncodeUnicodeAsync(str) {
-    // Implementazione asincrona non serve qui se non modifichiamo file,
-    // ma la teniamo per coerenza se decidessimo di rimuovere roba dalla watchlist.
+function b64EncodeUnicode(str) {
     return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
         function toSolidBytes(match, p1) {
             return String.fromCharCode('0x' + p1);
@@ -49,13 +48,21 @@ async function loadData() {
             headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
             cache: 'no-store'
         });
-        userData = JSON.parse(b64DecodeUnicode((await userRes.json()).content));
+        userdataSha = (await userRes.json()).sha;
         
-        // Safety check sulle strutture dati
-        if(!userData.movies.watchlist) userData.movies.watchlist = [];
-        if(!userData.tv.watchlist) userData.tv.watchlist = [];
+        const rawContent = (await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
+            headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' },
+            cache: 'no-store'
+        })).json();
+        
+        rawContent.then(r => {
+            userdataSha = r.sha;
+            userData = JSON.parse(b64DecodeUnicode(r.content));
+            if(!userData.movies.watchlist) userData.movies.watchlist = [];
+            if(!userData.tv.watchlist) userData.tv.watchlist = [];
+            renderList();
+        });
 
-        renderList();
     } catch (err) {
         console.error(err);
         alert("Errore nel caricamento dei dati da GitHub.");
@@ -76,6 +83,57 @@ function setView(view) {
     document.getElementById('btn-history').classList.toggle('active', view === 'history');
     document.getElementById('btn-watchlist').classList.toggle('active', view === 'watchlist');
     renderList();
+}
+
+async function changeRating(itemId) {
+    const currentRating = userData[currentTab].ratings[itemId].rating;
+    const newRatingStr = prompt(`Inserisci il nuovo voto per questo titolo (da 1 a 5):\nAttuale: ${currentRating}`, currentRating);
+    
+    if (newRatingStr === null) return; // Annullato
+    
+    const newRating = parseInt(newRatingStr);
+    if (isNaN(newRating) || newRating < 1 || newRating > 5) {
+        alert("Inserisci un numero valido da 1 a 5.");
+        return;
+    }
+
+    if (newRating === currentRating) return;
+
+    // Aggiorna in locale
+    userData[currentTab].ratings[itemId].rating = newRating;
+    userData[currentTab].ratings[itemId].timestamp = new Date().toISOString();
+    
+    // Aggiorna l'interfaccia istantaneamente
+    renderList();
+
+    // Salva su GitHub in background
+    await saveUserData();
+}
+
+async function saveUserData() {
+    const content = b64EncodeUnicode(JSON.stringify(userData, null, 2));
+    try {
+        const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${DATA_REPO}/contents/userdata.json`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${GITHUB_TOKEN}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: "Update rating from List view",
+                content: content,
+                sha: userdataSha
+            })
+        });
+        
+        if (!response.ok) throw new Error('Errore nel salvataggio su GitHub');
+        const data = await response.json();
+        userdataSha = data.content.sha;
+    } catch (err) {
+        console.error("Salvataggio fallito:", err);
+        alert("Si è verificato un errore nel salvataggio del nuovo voto su GitHub.");
+    }
 }
 
 function renderList() {
@@ -120,7 +178,7 @@ function renderList() {
                     <p>${(item.genres || []).join(', ')}</p>
                     <p style="font-size:0.8em; margin-top:4px;">Su: ${(item.platforms || []).join(', ')}</p>
                 </div>
-                <div class="list-item-rating">
+                <div class="list-item-rating editable-rating" onclick="changeRating(${item.id})" title="Clicca per modificare il voto">
                     ${item.rating} ⭐
                 </div>
             `;
@@ -128,7 +186,6 @@ function renderList() {
         });
 
     } else if (currentView === 'watchlist') {
-        // Render Watchlist di Gemini
         const watchlist = userData[currentTab]?.watchlist || [];
         
         if (watchlist.length === 0) {
@@ -138,8 +195,6 @@ function renderList() {
         }
 
         emptyState.style.display = 'none';
-
-        // Inverti array per avere gli ultimi salvati in alto
         const reversedList = [...watchlist].reverse();
         
         reversedList.forEach(item => {
