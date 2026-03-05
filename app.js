@@ -188,6 +188,16 @@ async function markNotSeen() {
     renderNextItem();
 }
 
+async function markNotInterested() {
+    if (!currentItem) return;
+    showLoading(true);
+    currentUserData[currentTab].ratings[currentItem.id] = { seen: false, notInterested: true, timestamp: new Date().toISOString() };
+    currentUserData[currentTab].asked.push(currentItem.id);
+    await saveUserData();
+    showLoading(false);
+    renderNextItem();
+}
+
 function skipItem() {
     if (!currentItem) return;
     currentUserData[currentTab].asked.push(currentItem.id);
@@ -312,19 +322,29 @@ function askGemini() {
         return { title: cat ? cat.title : '', genres: cat ? (cat.genres || []).join(', ') : '', rating: ratingsObj[id].rating, partial: ratingsObj[id].partial };
     });
 
+    const notInterested = Object.keys(ratingsObj).filter(id => ratingsObj[id].notInterested).map(id => {
+        const cat = catalogData[currentTab].find(i => i.id == id);
+        return { title: cat ? cat.title : '', genres: cat ? (cat.genres || []).join(', ') : '' };
+    });
+
     let pos = shuffleArray(allRatings.filter(r => r.rating >= 4 && !r.partial)).slice(0, 30).map(r => `"${r.title}" (${r.genres})`);
     let neg = shuffleArray(allRatings.filter(r => r.rating <= 2 && !r.partial)).slice(0, 15).map(r => `"${r.title}"`);
     let abn = shuffleArray(allRatings.filter(r => r.partial)).slice(0, 10).map(r => `"${r.title}"`);
+    let ni = shuffleArray(notInterested).slice(0, 10).map(r => `"${r.title}" (${r.genres})`);
 
-    const doNotSuggest = [...new Set([...allRatings.map(r=>r.title), ...(currentUserData[currentTab].watchlist || []).map(w=>w.title)])].filter(Boolean);
+    const doNotSuggest = [...new Set([
+        ...allRatings.map(r=>r.title), 
+        ...notInterested.map(r=>r.title),
+        ...(currentUserData[currentTab].watchlist || []).map(w=>w.title)
+    ])].filter(Boolean);
+
     const num = currentTab === 'movies' ? 10 : 5;
     const typeStr = currentTab === 'movies' ? 'film' : 'serie tv';
 
     let prompt = `Agisci come esperto di ${typeStr}. Consiglia ${num} ${typeStr} all'utente.
 AMATI: ${pos.join(', ')}.
 ODIATI: ${neg.join(', ')}.
-${abn.length > 0 ? `ABBANDONATI: ${abn.join(', ')}.\n` : ''}
-DIVIETO ASSOLUTO SU: ${JSON.stringify(doNotSuggest)}.
+${abn.length > 0 ? `ABBANDONATI: ${abn.join(', ')}.\n` : ''}${ni.length > 0 ? `SCARTATI A PRIORI (Evita questi generi/temi): ${ni.join(', ')}.\n` : ''}DIVIETO ASSOLUTO SU: ${JSON.stringify(doNotSuggest)}.
 Requisiti: disponibili in Italia (Netflix, Prime, Disney, NowTV). Sii vario.
 Rispondi in JSON: [{"title": "Nome", "year": 2023, "reason": "Motivo..."}] (senza markdown o testo extra).`;
 
@@ -343,19 +363,19 @@ function askGeminiCouple() {
         }).filter(Boolean);
     };
 
-    const getSeenOrWatchlist = (prof) => {
+    const getBlocked = (prof) => {
         const rObj = prof[currentTab].ratings;
-        const seen = Object.keys(rObj).filter(id => rObj[id].seen).map(id => {
+        const seenOrNotInt = Object.keys(rObj).filter(id => rObj[id].seen || rObj[id].notInterested).map(id => {
             const cat = catalogData[currentTab].find(i => i.id == id);
             return cat ? cat.title : null;
         });
         const wl = (prof[currentTab].watchlist || []).map(w => w.title);
-        return [...seen, ...wl].filter(Boolean);
+        return [...seenOrNotInt, ...wl].filter(Boolean);
     };
 
     let posA = shuffleArray(getPositives(profA)).slice(0, 20);
     let posB = shuffleArray(getPositives(profB)).slice(0, 20);
-    const doNotSuggest = [...new Set([...getSeenOrWatchlist(profA), ...getSeenOrWatchlist(profB)])];
+    const doNotSuggest = [...new Set([...getBlocked(profA), ...getBlocked(profB)])];
     
     const num = currentTab === 'movies' ? 5 : 4;
     const typeStr = currentTab === 'movies' ? 'film' : 'serie tv';
@@ -363,7 +383,7 @@ function askGeminiCouple() {
     let prompt = `Agisci come consulente di coppia per ${typeStr}. Trova ${num} titoli che mettano d'accordo Simone e Michela per la serata.
 SIMONE AMA: ${posA.join(', ')}.
 MICHELA AMA: ${posB.join(', ')}.
-DIVIETO ASSOLUTO SU (già visti da almeno uno dei due o in lista): ${JSON.stringify(doNotSuggest)}.
+DIVIETO ASSOLUTO SU (già visti da almeno uno dei due, scartati o in lista): ${JSON.stringify(doNotSuggest)}.
 Cerca compromessi perfetti o titoli che fondono i loro gusti. Disponibili in Italia.
 Rispondi in JSON puro: [{"title": "Nome", "year": 2023, "reason": "Motivo..."}]`;
 
