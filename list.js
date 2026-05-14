@@ -127,40 +127,70 @@ function filterList() {
 
 async function askManualAdd() {
     const typeLabel = currentTab === 'movies' ? 'del Film' : 'della Serie TV';
+    const viewLabel = currentView === 'history' ? 'STORICO VOTATI' : 'DA VEDERE (WATCHLIST)';
+
+    const title = prompt(`${viewLabel}:\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere:`);
+    if (!title || !title.trim()) return;
+    const cleanTitle = title.trim();
+
+    const lower = cleanTitle.toLowerCase();
+    const matches = (catalogData[currentTab] || []).filter(item =>
+        item.title.toLowerCase().includes(lower) || lower.includes(item.title.toLowerCase())
+    );
+
+    let catalogItem = null;
+    if (matches.length > 0) {
+        let msg = `Trovati ${matches.length} titoli nel catalogo:\n\n`;
+        matches.forEach((m, i) => {
+            msg += `${i + 1}. ${m.title} (${m.year})${m.platforms?.length ? ' — ' + m.platforms.join(', ') : ''}\n`;
+        });
+        msg += '\n0. Nessuno di questi — aggiungi manualmente\n\nScegli:';
+        const choice = parseInt(prompt(msg));
+        if (choice > 0 && choice <= matches.length) {
+            catalogItem = matches[choice - 1];
+        }
+    }
+
     if (currentView === 'history') {
-        const title = prompt(`STORICO VOTATI:\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere:`);
-        if (!title || !title.trim()) return;
-        const ratingStr = prompt(`Che voto dai a "${title.trim()}"? (da 1 a 5)`);
+        const ratingStr = prompt(`Che voto dai a "${catalogItem ? catalogItem.title : cleanTitle}"? (da 1 a 5)`);
         if (!ratingStr) return;
         const rating = parseInt(ratingStr);
         if (isNaN(rating) || rating < 1 || rating > 5) return alert("Devi inserire un numero tra 1 e 5.");
-        
+
         let isPartial = false;
         let isOngoing = false;
-        
+
         if (currentTab === 'tv') {
-            isPartial = confirm(`Hai ABBANDONATO "${title.trim()}" a metà?\n[OK] = Sì, l'ho abbandonata\n[Annulla] = No, l'ho finita/sono in pari`);
+            isPartial = confirm(`Hai ABBANDONATO "${catalogItem ? catalogItem.title : cleanTitle}" a metà?\n[OK] = Sì, l'ho abbandonata\n[Annulla] = No, l'ho finita/sono in pari`);
             if (!isPartial) {
-                isOngoing = confirm(`La serie "${title.trim()}" è IN CORSO (sei in attesa di nuove stagioni)?\n[OK] = Sì, attendo altre stagioni\n[Annulla] = No, è conclusa definitivamente`);
+                isOngoing = confirm(`La serie "${catalogItem ? catalogItem.title : cleanTitle}" è IN CORSO (sei in attesa di nuove stagioni)?\n[OK] = Sì, attendo altre stagioni\n[Annulla] = No, è conclusa definitivamente`);
             }
         }
-        
-        userData[currentTab].manual_queue.push({ 
-            title: title.trim(), 
-            rating: rating, 
-            partial: isPartial,
-            ongoing: isOngoing,
-            addedAt: new Date().toISOString() 
-        });
-        
+
+        const base = { rating, partial: isPartial, ongoing: isOngoing, addedAt: new Date().toISOString() };
+        if (catalogItem) {
+            base.title = catalogItem.title;
+            base.tmdb = { id: catalogItem.id, year: catalogItem.year, genres: catalogItem.genres, platforms: catalogItem.platforms, poster: catalogItem.poster, release_date: '', status: 'Released' };
+        } else {
+            base.title = cleanTitle;
+        }
+        userData[currentTab].manual_queue.push(base);
+
         renderList(); await saveUserData();
-        alert(`"${title.trim()}" inserito nello storico!`);
+        alert(`"${base.title}" inserito nello storico!`);
     } else {
-        const title = prompt(`DA VEDERE (WATCHLIST):\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere:`);
-        if (!title || !title.trim()) return;
-        userData[currentTab].watchlist.push({ title: title.trim(), reason: "Aggiunto manualmente.", addedAt: new Date().toISOString() });
+        const base = { reason: "Aggiunto manualmente.", addedAt: new Date().toISOString() };
+        if (catalogItem) {
+            base.id = catalogItem.id;
+            base.title = catalogItem.title;
+            base.tmdb = { id: catalogItem.id, year: catalogItem.year, genres: catalogItem.genres, platforms: catalogItem.platforms, poster: catalogItem.poster, release_date: '', status: 'Released' };
+        } else {
+            base.title = cleanTitle;
+        }
+        userData[currentTab].watchlist.push(base);
+
         renderList(); await saveUserData();
-        alert(`"${title.trim()}" inserito nella Watchlist!`);
+        alert(`"${base.title}" inserito nella Watchlist!`);
     }
 }
 
