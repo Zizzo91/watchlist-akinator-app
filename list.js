@@ -146,10 +146,12 @@ function showManualAddDialog(title) {
 }
 
 function onDialogInput() {
+    console.log('onDialogInput called, val:', document.getElementById('dialog-input').value);
     const input = document.getElementById('dialog-input');
     const val = input.value.trim();
     const container = document.getElementById('dialog-suggestions');
     const info = document.getElementById('dialog-info');
+    if (!info) { console.error('dialog-info not found'); return; }
 
     _dialogData.catalogItem = null;
 
@@ -159,27 +161,32 @@ function onDialogInput() {
         return;
     }
 
+    console.log('catalogData:', typeof catalogData, 'currentTab:', currentTab);
     let arr;
     try {
         arr = catalogData && catalogData[currentTab];
     } catch(e) {
-        info.textContent = '⚠️ Errore accesso catalogo: ' + e.message;
+        info.textContent = '⚠️ Errore: ' + e.message;
         container.innerHTML = '';
         return;
     }
 
     if (!arr || arr.length === 0) {
-        info.textContent = `⚠️ Catalogo "${currentTab}" vuoto o non caricato. Totale oggetti in catalogData: ${typeof catalogData === 'object' ? Object.keys(catalogData || {}).join(', ') : typeof catalogData}`;
+        const infoStr = typeof catalogData === 'object' ? Object.keys(catalogData || {}).join(', ') : typeof catalogData;
+        info.textContent = `⚠️ Catalogo "${currentTab}" vuoto. Chiavi: ${infoStr}. Array: ${Array.isArray(arr)}`;
         container.innerHTML = '';
         return;
     }
 
+    console.log('arr length:', arr.length);
+
     const lower = val.toLowerCase();
     _dialogData.matches = arr.filter(item => {
         if (!item || !item.title) return false;
-        const t = item.title.toLowerCase();
-        return t.includes(lower);
+        return item.title.toLowerCase().includes(lower);
     }).slice(0, 15);
+
+    console.log('matches:', _dialogData.matches.length);
 
     if (_dialogData.matches.length > 0) {
         info.textContent = `Scegli un suggerimento (${_dialogData.matches.length} trovati su ${arr.length} titoli):`;
@@ -196,17 +203,32 @@ function onDialogInput() {
     }
 }
 
-document.getElementById('dialog-suggestions').addEventListener('click', e => {
-    const el = e.target.closest('.suggestion-item');
-    if (!el) return;
-    const idx = parseInt(el.dataset.index);
-    if (idx >= 0 && idx < _dialogData.matches.length) {
-        _dialogData.catalogItem = _dialogData.matches[idx];
-        document.getElementById('dialog-input').value = _dialogData.matches[idx].title;
-        document.getElementById('dialog-info').textContent = `✅ Selezionato: ${_dialogData.matches[idx].title}`;
-        document.getElementById('dialog-suggestions').innerHTML = '';
-    }
-});
+function onDialogKeydown(e) {
+    if (e.key === 'Enter') confirmManualAdd();
+    if (e.key === 'Escape') cancelManualAdd();
+}
+
+function setupDialogEvents() {
+    const input = document.getElementById('dialog-input');
+    input.addEventListener('input', onDialogInput);
+    input.addEventListener('keyup', onDialogInput);
+    input.addEventListener('keydown', onDialogKeydown);
+
+    document.getElementById('btn-dialog-confirm').addEventListener('click', confirmManualAdd);
+    document.getElementById('btn-dialog-cancel').addEventListener('click', cancelManualAdd);
+
+    document.getElementById('dialog-suggestions').addEventListener('click', e => {
+        const el = e.target.closest('.suggestion-item');
+        if (!el) return;
+        const idx = parseInt(el.dataset.index);
+        if (idx >= 0 && idx < _dialogData.matches.length) {
+            _dialogData.catalogItem = _dialogData.matches[idx];
+            document.getElementById('dialog-input').value = _dialogData.matches[idx].title;
+            document.getElementById('dialog-info').textContent = `✅ Selezionato: ${_dialogData.matches[idx].title}`;
+            document.getElementById('dialog-suggestions').innerHTML = '';
+        }
+    });
+}
 
 function confirmManualAdd() {
     const input = document.getElementById('dialog-input');
@@ -234,6 +256,8 @@ function cancelManualAdd() {
     document.getElementById('dialog-info').textContent = '';
     if (resolver) resolver(null);
 }
+
+setupDialogEvents();
 
 async function askManualAdd() {
     const typeLabel = currentTab === 'movies' ? 'Film' : 'Serie TV';

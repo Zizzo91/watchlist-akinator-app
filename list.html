@@ -135,13 +135,13 @@
         <div class="modal-box">
             <h3 id="dialog-title">Aggiungi</h3>
             <div class="autocomplete-wrap">
-                <input type="text" id="dialog-input" placeholder="Inizia a scrivere il titolo..." autocomplete="off" oninput="onDialogInput()" onkeyup="onDialogInput()" onkeydown="if(event.key==='Enter')confirmManualAdd();if(event.key==='Escape')cancelManualAdd();">
+                <input type="text" id="dialog-input" placeholder="Inizia a scrivere il titolo..." autocomplete="off">
                 <div style="font-size:0.85em; color:#aaa; margin-top:6px; min-height:1.4em;" id="dialog-info"></div>
                 <div id="dialog-suggestions"></div>
             </div>
             <div class="modal-actions">
-                <button onclick="confirmManualAdd()" class="btn-primary">Conferma</button>
-                <button onclick="cancelManualAdd()" class="btn-secondary">Annulla</button>
+                <button id="btn-dialog-confirm" class="btn-primary">Conferma</button>
+                <button id="btn-dialog-cancel" class="btn-secondary">Annulla</button>
             </div>
         </div>
     </div>
