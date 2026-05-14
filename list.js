@@ -159,9 +159,17 @@ function onDialogInput() {
         return;
     }
 
-    const arr = catalogData && catalogData[currentTab];
+    let arr;
+    try {
+        arr = catalogData && catalogData[currentTab];
+    } catch(e) {
+        info.textContent = '⚠️ Errore accesso catalogo: ' + e.message;
+        container.innerHTML = '';
+        return;
+    }
+
     if (!arr || arr.length === 0) {
-        info.textContent = '⚠️ Catalogo non disponibile.';
+        info.textContent = `⚠️ Catalogo "${currentTab}" vuoto o non caricato. Totale oggetti in catalogData: ${typeof catalogData === 'object' ? Object.keys(catalogData || {}).join(', ') : typeof catalogData}`;
         container.innerHTML = '';
         return;
     }
@@ -169,19 +177,21 @@ function onDialogInput() {
     const lower = val.toLowerCase();
     _dialogData.matches = arr.filter(item => {
         if (!item || !item.title) return false;
-        return item.title.toLowerCase().includes(lower);
-    }).slice(0, 8);
+        const t = item.title.toLowerCase();
+        return t.includes(lower);
+    }).slice(0, 15);
 
     if (_dialogData.matches.length > 0) {
-        info.textContent = `Scegli un suggerimento (${_dialogData.matches.length} trovati):`;
+        info.textContent = `Scegli un suggerimento (${_dialogData.matches.length} trovati su ${arr.length} titoli):`;
         container.innerHTML = _dialogData.matches.map((m, i) =>
             `<div class="suggestion-item" data-index="${i}">
                 <span class="s-title">${m.title} (${m.year})</span>
-                <span class="s-meta">${(m.platforms || []).join(', ')}</span>
+                <span class="s-meta">${(m.platforms || []).slice(0,2).join(', ')}${m.platforms?.length > 2 ? '…' : ''}</span>
             </div>`
         ).join('');
     } else {
-        info.textContent = 'Nessun match — verrà aggiunto manualmente.';
+        const sample = arr.slice(0, 3).map(i => i.title).join(', ');
+        info.textContent = `Nessun match per "${val}" tra i ${arr.length} titoli. Esempi: ${sample}...`;
         container.innerHTML = '';
     }
 }
