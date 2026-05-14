@@ -140,20 +140,10 @@ function renderNextItem() {
         return;
     }
     
-    const minYear = Math.min(...unseenItems.map(i => i.year || 0));
-    const weights = unseenItems.map(i => {
-        const base = (i.year || minYear) - minYear + 1;
-        return base * base;
-    });
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    let rand = Math.random() * totalWeight;
-    for (let i = 0; i < unseenItems.length; i++) {
-        rand -= weights[i];
-        if (rand <= 0) {
-            currentItem = unseenItems[i];
-            break;
-        }
-    }
+    const sortedByRecent = [...unseenItems].sort((a, b) => (b.year || 0) - (a.year || 0));
+    const cutoff = Math.max(1, Math.ceil(sortedByRecent.length / 2));
+    const recentPool = sortedByRecent.slice(0, cutoff);
+    currentItem = recentPool[Math.floor(Math.random() * recentPool.length)];
     
     document.getElementById('item-title').innerText = `${currentItem.title} (${currentItem.year})`;
     const posterSrc = currentItem.poster || 'https://via.placeholder.com/200x300?text=No+Poster';

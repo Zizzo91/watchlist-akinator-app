@@ -407,7 +407,7 @@ function renderList() {
     }
 
     const hasUntracked = (userData[currentTab]?.manual_queue || []).some(i => !i.tmdb) ||
-                         (userData[currentTab]?.watchlist || []).some(i => !i.tmdb);
+                         (userData[currentTab]?.watchlist || []).some(i => !i.id && !i.tmdb);
     document.getElementById('btn-enrich').style.display = hasUntracked ? 'inline-block' : 'none';
 }
 
@@ -488,7 +488,7 @@ async function enrichAllManual() {
 
     const toProcess = [];
     manualItems.forEach((item, idx) => { if (!item.tmdb) toProcess.push({ source: 'manual', idx, title: item.title }); });
-    watchlistItems.forEach((item, idx) => { if (!item.tmdb) toProcess.push({ source: 'watchlist', idx, title: item.title }); });
+    watchlistItems.forEach((item, idx) => { if (!item.id && !item.tmdb) toProcess.push({ source: 'watchlist', idx, title: item.title }); });
 
     if (toProcess.length === 0) {
         alert('Nessun titolo manuale da arricchire con TMDB.');
