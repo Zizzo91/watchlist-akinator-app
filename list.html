@@ -42,6 +42,36 @@
         #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
         @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
         @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.75); z-index: 9999;
+            justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #1a1a1a; border: 1px solid #444; border-radius: 16px;
+            padding: 25px; max-width: 500px; width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+        }
+        .modal-box h3 { margin-top: 0; color: var(--accent-color); }
+        .autocomplete-wrap { position: relative; margin-bottom: 15px; }
+        .autocomplete-wrap input {
+            width: 100%; padding: 14px; border-radius: 8px; border: 1px solid #444;
+            background: #141414; color: white; font-size: 1rem; box-sizing: border-box;
+        }
+        .autocomplete-wrap input:focus { outline: none; border-color: var(--accent-color); }
+        .suggestion-item {
+            padding: 10px 14px; cursor: pointer; display: flex;
+            justify-content: space-between; align-items: center; transition: background 0.15s;
+            border: 1px solid #333; border-radius: 8px; margin-top: 6px;
+        }
+        .suggestion-item:hover { background: #333; border-color: var(--accent-color); }
+        .suggestion-item.selected { border-color: var(--accent-color); background: rgba(229,9,20,0.1); }
+        .suggestion-item .s-title { font-weight: 600; }
+        .suggestion-item .s-meta { font-size: 0.8em; color: #888; text-align: right; margin-left: 10px; white-space: nowrap; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 15px; }
+        .modal-actions button { flex: 1; }
     </style>
 </head>
 <body>
@@ -95,6 +125,21 @@
     </main>
 
     <div id="toast">Copiato negli appunti!</div>
+
+    <div class="modal-overlay" id="manual-dialog">
+        <div class="modal-box">
+            <h3 id="dialog-title">Aggiungi</h3>
+            <div class="autocomplete-wrap">
+                <input type="text" id="dialog-input" placeholder="Inizia a scrivere il titolo..." autocomplete="off" oninput="onDialogInput()" onkeyup="onDialogInput()" onkeydown="if(event.key==='Enter')confirmManualAdd();if(event.key==='Escape')cancelManualAdd();">
+                <div style="font-size:0.85em; color:#aaa; margin-top:6px; min-height:1.4em;" id="dialog-info"></div>
+                <div id="dialog-suggestions"></div>
+            </div>
+            <div class="modal-actions">
+                <button onclick="confirmManualAdd()" class="btn-primary">Conferma</button>
+                <button onclick="cancelManualAdd()" class="btn-secondary">Annulla</button>
+            </div>
+        </div>
+    </div>
 
     <script src="list.js"></script>
 </body>

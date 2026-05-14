@@ -125,31 +125,114 @@ function filterList() {
     renderList();
 }
 
-async function askManualAdd() {
-    const typeLabel = currentTab === 'movies' ? 'del Film' : 'della Serie TV';
-    const viewLabel = currentView === 'history' ? 'STORICO VOTATI' : 'DA VEDERE (WATCHLIST)';
+// ─── Dialog manuale con autocomplete ─────────────────────────────
 
-    const title = prompt(`${viewLabel}:\nInserisci il NOME ESATTO ${typeLabel} che vuoi aggiungere:`);
-    if (!title || !title.trim()) return;
-    const cleanTitle = title.trim();
+let _dialogData = { resolver: null, catalogItem: null, matches: [] };
 
-    const lower = cleanTitle.toLowerCase();
-    const matches = (catalogData[currentTab] || []).filter(item =>
-        item.title.toLowerCase().includes(lower) || lower.includes(item.title.toLowerCase())
-    );
+function showManualAddDialog(title) {
+    return new Promise(resolve => {
+        _dialogData.resolver = resolve;
+        _dialogData.catalogItem = null;
+        _dialogData.matches = [];
+        document.getElementById('dialog-title').textContent = title;
+        const input = document.getElementById('dialog-input');
+        input.value = '';
+        document.getElementById('dialog-info').textContent = 'Scrivi per cercare nel catalogo...';
+        document.getElementById('dialog-suggestions').innerHTML = '';
+        document.getElementById('manual-dialog').classList.add('active');
+        setTimeout(() => input.focus(), 100);
+    });
+}
 
-    let catalogItem = null;
-    if (matches.length > 0) {
-        let msg = `Trovati ${matches.length} titoli nel catalogo:\n\n`;
-        matches.forEach((m, i) => {
-            msg += `${i + 1}. ${m.title} (${m.year})${m.platforms?.length ? ' — ' + m.platforms.join(', ') : ''}\n`;
-        });
-        msg += '\n0. Nessuno di questi — aggiungi manualmente\n\nScegli:';
-        const choice = parseInt(prompt(msg));
-        if (choice > 0 && choice <= matches.length) {
-            catalogItem = matches[choice - 1];
-        }
+function onDialogInput() {
+    const input = document.getElementById('dialog-input');
+    const val = input.value.trim();
+    const container = document.getElementById('dialog-suggestions');
+    const info = document.getElementById('dialog-info');
+
+    _dialogData.catalogItem = null;
+
+    if (!val) {
+        container.innerHTML = '';
+        info.textContent = 'Scrivi per cercare nel catalogo...';
+        return;
     }
+
+    const arr = catalogData && catalogData[currentTab];
+    if (!arr || arr.length === 0) {
+        info.textContent = '⚠️ Catalogo non disponibile.';
+        container.innerHTML = '';
+        return;
+    }
+
+    const lower = val.toLowerCase();
+    _dialogData.matches = arr.filter(item => {
+        if (!item || !item.title) return false;
+        return item.title.toLowerCase().includes(lower);
+    }).slice(0, 8);
+
+    if (_dialogData.matches.length > 0) {
+        info.textContent = `Scegli un suggerimento (${_dialogData.matches.length} trovati):`;
+        container.innerHTML = _dialogData.matches.map((m, i) =>
+            `<div class="suggestion-item" data-index="${i}">
+                <span class="s-title">${m.title} (${m.year})</span>
+                <span class="s-meta">${(m.platforms || []).join(', ')}</span>
+            </div>`
+        ).join('');
+    } else {
+        info.textContent = 'Nessun match — verrà aggiunto manualmente.';
+        container.innerHTML = '';
+    }
+}
+
+document.getElementById('dialog-suggestions').addEventListener('click', e => {
+    const el = e.target.closest('.suggestion-item');
+    if (!el) return;
+    const idx = parseInt(el.dataset.index);
+    if (idx >= 0 && idx < _dialogData.matches.length) {
+        _dialogData.catalogItem = _dialogData.matches[idx];
+        document.getElementById('dialog-input').value = _dialogData.matches[idx].title;
+        document.getElementById('dialog-info').textContent = `✅ Selezionato: ${_dialogData.matches[idx].title}`;
+        document.getElementById('dialog-suggestions').innerHTML = '';
+    }
+});
+
+function confirmManualAdd() {
+    const input = document.getElementById('dialog-input');
+    const title = input.value.trim();
+    if (!title) return;
+
+    if (!_dialogData.catalogItem && _dialogData.matches.length > 0) {
+        const exact = _dialogData.matches.find(m => m.title.toLowerCase() === title.toLowerCase());
+        if (exact) _dialogData.catalogItem = exact;
+    }
+
+    const { resolver, catalogItem } = _dialogData;
+    _dialogData.resolver = null;
+    document.getElementById('manual-dialog').classList.remove('active');
+    document.getElementById('dialog-suggestions').innerHTML = '';
+    document.getElementById('dialog-info').textContent = '';
+    if (resolver) resolver({ title, catalogItem });
+}
+
+function cancelManualAdd() {
+    const { resolver } = _dialogData;
+    _dialogData.resolver = null;
+    document.getElementById('manual-dialog').classList.remove('active');
+    document.getElementById('dialog-suggestions').innerHTML = '';
+    document.getElementById('dialog-info').textContent = '';
+    if (resolver) resolver(null);
+}
+
+async function askManualAdd() {
+    const typeLabel = currentTab === 'movies' ? 'Film' : 'Serie TV';
+    const viewLabel = currentView === 'history' ? 'allo Storico' : 'alla Watchlist';
+
+    const result = await showManualAddDialog(`Aggiungi ${typeLabel} ${viewLabel}`);
+    if (!result) return;
+
+    const cleanTitle = result.title;
+    const catalogItem = result.catalogItem;
 
     if (currentView === 'history') {
         const ratingStr = prompt(`Che voto dai a "${catalogItem ? catalogItem.title : cleanTitle}"? (da 1 a 5)`);
