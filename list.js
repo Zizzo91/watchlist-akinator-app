@@ -198,7 +198,10 @@ async function markWatchlistAsSeen(title, itemId) {
         userData[currentTab].ratings[itemId] = { rating: rating, seen: true, partial: isPartial, ongoing: isOngoing, timestamp: new Date().toISOString() };
         if (!userData[currentTab].asked.includes(itemId)) userData[currentTab].asked.push(itemId);
     } else {
-        userData[currentTab].manual_queue.push({ title: title, rating: rating, partial: isPartial, ongoing: isOngoing, addedAt: new Date().toISOString() });
+        const manualItem = { title: title, rating: rating, partial: isPartial, ongoing: isOngoing, addedAt: new Date().toISOString() };
+        const existingWatchlistItem = userData[currentTab].watchlist.find(i => i.title === title);
+        if (existingWatchlistItem?.tmdb) manualItem.tmdb = existingWatchlistItem.tmdb;
+        userData[currentTab].manual_queue.push(manualItem);
     }
     renderList(); await saveUserData();
     alert(`"${title}" spostato nello Storico con voto ${rating}⭐!`);
@@ -283,7 +286,7 @@ function renderList() {
         }).filter(i => i.title); 
             
         let manualItems = (userData[currentTab]?.manual_queue || []).map(item => ({
-            id: 'manual', title: item.title, year: '⏳ Ricerca...', genres: ['In attesa'], platforms: [], rating: item.rating, partial: item.partial || false, ongoing: item.ongoing || false, poster: 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3', isManual: true, timestamp: item.addedAt
+            id: 'manual', title: item.title, year: item.tmdb ? item.tmdb.year : '⏳ Ricerca...', genres: item.tmdb ? item.tmdb.genres : (item.tmdb?.release_date ? ['In arrivo'] : ['In attesa']), platforms: item.tmdb ? item.tmdb.platforms : [], rating: item.rating, partial: item.partial || false, ongoing: item.ongoing || false, poster: item.tmdb?.poster || 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3', isManual: true, timestamp: item.addedAt, tmdb: item.tmdb || null
         }));
 
         if (searchQuery) {
@@ -366,23 +369,31 @@ function renderList() {
         [...watchlist].reverse().forEach(item => {
             const div = document.createElement('div'); div.className = 'list-item'; 
             let catItem = item.id ? items.find(i => i.id == item.id) : items.find(i => i.title.toLowerCase() === item.title.toLowerCase());
-            const poster = catItem && catItem.poster ? catItem.poster : 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3';
-            const year = catItem && catItem.year ? catItem.year : (item.year || '⏳');
-            const genres = catItem && catItem.genres ? catItem.genres.join(', ') : (!catItem ? '⏳ In attesa...' : '');
-            const platforms = catItem && catItem.platforms ? catItem.platforms.join(', ') : '';
+            const hasTmdb = !!item.tmdb;
+            const poster = catItem?.poster || item.tmdb?.poster || 'https://via.placeholder.com/60x90/333333/ffffff?text=%E2%8F%B3';
+            const year = catItem?.year || item.tmdb?.year || item.year || '⏳';
+            const genres = catItem?.genres?.join(', ') || item.tmdb?.genres?.join(', ') || (!catItem && !hasTmdb ? '⏳ In attesa...' : '');
+            const platformList = catItem?.platforms || item.tmdb?.platforms || [];
+            const isFuture = hasTmdb && item.tmdb.release_date && new Date(item.tmdb.release_date) > new Date();
             const escapedTitle = item.title.replace(/'/g, "\\'");
             const idParam = catItem ? `'${catItem.id}'` : null;
 
             const searchTrailerUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(item.title + ' ' + (year!=='⏳' ? year : '') + ' trailer ita')}`;
 
+            const platformHtml = isFuture
+                ? `<span style="color:#00a8e1;font-size:0.8em;font-weight:600;">📅 ${new Date(item.tmdb.release_date).toLocaleDateString('it-IT')}${platformList.length ? ' su ' + platformList.join(', ') : ''}</span>`
+                : (platformList.length ? `<span style="font-size:0.8em; color:#888;">Su: ${platformList.join(', ')}</span>` : '');
+
+            const itemColor = !catItem && !hasTmdb ? '#ffb74d' : '#aaa';
+
             div.innerHTML = `
                 <img src="${poster}" alt="Poster" style="align-self: flex-start;" onclick="copyTitle('${escapedTitle}')">
                 <div class="list-item-content">
                     <h3 style="color: var(--accent-color);">${item.title} ${year !== '⏳' ? `(${year})` : ''}</h3>
-                    <p style="color: ${!catItem ? '#ffb74d' : '#aaa'}; font-size: 0.8em; margin-bottom: 5px;">${genres}</p>
+                    <p style="color: ${itemColor}; font-size: 0.8em; margin-bottom: 5px;">${genres}</p>
                     <p style="color: #ddd; font-style: italic; font-size: 0.9em; white-space: normal; line-height: 1.3; flex-grow: 1;">"${item.reason}"</p>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
-                        <span style="font-size:0.8em; color:#888;">${platforms ? `Su: ${platforms}` : ''}</span>
+                        ${platformHtml}
                         <a class="trailer-link" href="${searchTrailerUrl}" target="_blank" style="margin:0;">▶️ Trailer</a>
                     </div>
                 </div>
@@ -394,4 +405,147 @@ function renderList() {
             listOutput.appendChild(div);
         });
     }
+
+    const hasUntracked = (userData[currentTab]?.manual_queue || []).some(i => !i.tmdb) ||
+                         (userData[currentTab]?.watchlist || []).some(i => !i.tmdb);
+    document.getElementById('btn-enrich').style.display = hasUntracked ? 'inline-block' : 'none';
+}
+
+// ─── TMDB Enrichment ─────────────────────────────────────────────
+
+function getTMDBToken() {
+    let token = localStorage.getItem('tmdb_token');
+    if (!token) {
+        token = prompt('Inserisci il tuo TMDB API Read Access Token (v4):\n(lo trovi su https://www.themoviedb.org/settings/api)');
+        if (token && token.trim()) {
+            token = token.trim();
+            localStorage.setItem('tmdb_token', token);
+        } else {
+            return null;
+        }
+    }
+    return token;
+}
+
+async function searchTMDB(query, type, token) {
+    const endpoint = type === 'movie' ? 'movie' : 'tv';
+    const res = await fetch(`https://api.themoviedb.org/3/search/${endpoint}?query=${encodeURIComponent(query)}&language=it-IT&page=1`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'accept': 'application/json' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.results || [];
+}
+
+async function fetchTMDBDetails(tmdbId, type, token) {
+    const endpoint = type === 'movie' ? 'movie' : 'tv';
+    const PROVIDER_MAP = { 8: 'Netflix', 119: 'Prime Video', 337: 'Disney+', 393: 'Now TV' };
+
+    const [detailsRes, providersRes] = await Promise.all([
+        fetch(`https://api.themoviedb.org/3/${endpoint}/${tmdbId}?language=it-IT`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'accept': 'application/json' }
+        }),
+        fetch(`https://api.themoviedb.org/3/${endpoint}/${tmdbId}/watch/providers`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'accept': 'application/json' }
+        })
+    ]);
+
+    if (!detailsRes.ok) return null;
+
+    const details = await detailsRes.json();
+    const providersData = providersRes.ok ? await providersRes.json() : null;
+
+    let platforms = [];
+    if (providersData?.results?.IT?.flatrate) {
+        platforms = providersData.results.IT.flatrate
+            .map(p => PROVIDER_MAP[p.provider_id])
+            .filter(Boolean);
+    }
+
+    const releaseDate = type === 'movie' ? details.release_date : details.first_air_date;
+
+    return {
+        id: details.id,
+        title: details.title || details.name,
+        year: releaseDate ? parseInt(releaseDate.substring(0, 4)) : 0,
+        genres: (details.genres || []).map(g => g.name),
+        poster: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : '',
+        platforms: platforms,
+        release_date: releaseDate || '',
+        status: details.status || ''
+    };
+}
+
+async function enrichAllManual() {
+    const token = getTMDBToken();
+    if (!token) return;
+
+    const type = currentTab === 'movies' ? 'movie' : 'tv';
+    const typeLabel = currentTab === 'movies' ? 'film' : 'serie TV';
+
+    const manualItems = userData[currentTab]?.manual_queue || [];
+    const watchlistItems = userData[currentTab]?.watchlist || [];
+
+    const toProcess = [];
+    manualItems.forEach((item, idx) => { if (!item.tmdb) toProcess.push({ source: 'manual', idx, title: item.title }); });
+    watchlistItems.forEach((item, idx) => { if (!item.tmdb) toProcess.push({ source: 'watchlist', idx, title: item.title }); });
+
+    if (toProcess.length === 0) {
+        alert('Nessun titolo manuale da arricchire con TMDB.');
+        return;
+    }
+
+    const logDiv = document.createElement('div');
+    logDiv.id = 'enrich-log';
+    logDiv.style.cssText = 'background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px 15px; margin: 10px auto; max-width: 1000px; max-height: 200px; overflow-y: auto; font-size: 0.85em; font-family: monospace; width: 100%;';
+    const listOutput = document.getElementById('list-output');
+    listOutput.parentNode.insertBefore(logDiv, listOutput);
+
+    function log(msg) {
+        const time = new Date().toLocaleTimeString('it-IT');
+        logDiv.innerHTML += `<div style="margin-bottom: 2px;"><span style="color:#888;">[${time}]</span> ${msg}</div>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    log(`🔍 Cerco ${toProcess.length} ${typeLabel} su TMDB...`);
+
+    let enriched = 0;
+    let notFound = 0;
+
+    for (const entry of toProcess) {
+        log(`   Cerco "${entry.title}"...`);
+        const results = await searchTMDB(entry.title, type, token);
+
+        if (results && results.length > 0) {
+            const bestMatch = results[0];
+            const details = await fetchTMDBDetails(bestMatch.id, type, token);
+
+            if (details) {
+                if (entry.source === 'manual') {
+                    userData[currentTab].manual_queue[entry.idx].tmdb = details;
+                } else {
+                    userData[currentTab].watchlist[entry.idx].tmdb = details;
+                }
+                log(`   ✅ "${details.title}" (${details.year})${details.platforms.length ? ' — ' + details.platforms.join(', ') : ''}${details.release_date ? ' — ' + details.release_date : ''}`);
+                enriched++;
+            } else {
+                log(`   ⚠️ "${entry.title}" — errore dettagli`);
+                notFound++;
+            }
+        } else {
+            log(`   ❌ "${entry.title}" — nessun risultato su TMDB`);
+            notFound++;
+        }
+    }
+
+    log(`💾 Salvataggio su GitHub...`);
+    await saveUserData();
+    log(`✅ Completato! ${enriched} arricchiti, ${notFound} non trovati.`);
+
+    setTimeout(() => {
+        const el = document.getElementById('enrich-log');
+        if (el) el.remove();
+    }, 8000);
+
+    renderList();
 }

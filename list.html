@@ -68,6 +68,7 @@
             <div class="search-top-row">
                 <input type="text" id="search-input" placeholder="Cerca titolo esatto..." onkeyup="filterList()">
                 <button onclick="askManualAdd()" class="btn-primary" style="white-space: nowrap; width: auto; padding: 0 15px; font-size:0.9em; margin:0;">+ Aggiungi</button>
+                <button onclick="enrichAllManual()" id="btn-enrich" class="btn-secondary" style="white-space: nowrap; width: auto; padding: 0 12px; font-size:0.85em; margin:0; display:none;">🔍 TMDB</button>
             </div>
             <div class="filters-row" id="filters-row">
                 <select id="filter-genre" onchange="filterList()"><option value="">Tutti i Generi</option></select>

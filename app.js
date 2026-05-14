@@ -140,8 +140,20 @@ function renderNextItem() {
         return;
     }
     
-    const randomIndex = Math.floor(Math.random() * unseenItems.length);
-    currentItem = unseenItems[randomIndex];
+    const minYear = Math.min(...unseenItems.map(i => i.year || 0));
+    const weights = unseenItems.map(i => {
+        const base = (i.year || minYear) - minYear + 1;
+        return base * base;
+    });
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let rand = Math.random() * totalWeight;
+    for (let i = 0; i < unseenItems.length; i++) {
+        rand -= weights[i];
+        if (rand <= 0) {
+            currentItem = unseenItems[i];
+            break;
+        }
+    }
     
     document.getElementById('item-title').innerText = `${currentItem.title} (${currentItem.year})`;
     const posterSrc = currentItem.poster || 'https://via.placeholder.com/200x300?text=No+Poster';
