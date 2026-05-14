@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('search-container').style.display = 'flex';
     document.getElementById('app-main').style.display = 'flex';
     await loadData();
+    applyURLFilters();
 });
 
 async function loadData() {
@@ -660,5 +661,77 @@ async function enrichAllManual() {
         if (el) el.remove();
     }, 8000);
 
+    renderList();
+}
+
+// ─── Filtri da URL (statistiche) ────────────────────────────────
+
+function applyURLFilters() {
+    const params = new URLSearchParams(window.location.search);
+    let hasFilter = false;
+    const parts = [];
+
+    if (params.get('tab')) {
+        const tab = params.get('tab');
+        if (tab === 'movies' || tab === 'tv') {
+            currentTab = tab;
+            document.getElementById('btn-movies').classList.toggle('active', tab === 'movies');
+            document.getElementById('btn-tv').classList.toggle('active', tab === 'tv');
+            document.getElementById('search-input').value = '';
+            updateFiltersUI();
+            populateGenreDropdown();
+        }
+    }
+
+    document.getElementById('filter-rating').value = '';
+    document.getElementById('filter-genre').value = '';
+    document.getElementById('filter-platform').value = '';
+
+    if (params.get('filter-rating')) {
+        const val = params.get('filter-rating');
+        document.getElementById('filter-rating').value = val;
+        filterRating = val;
+        hasFilter = true;
+        const labels = { partial: 'non completate', ongoing: 'in corso', 1: '1⭐', 2: '2⭐', 3: '3⭐', 4: '4⭐', 5: '5⭐' };
+        parts.push(`voto ${labels[val] || val}`);
+    }
+    if (params.get('filter-genre')) {
+        const val = params.get('filter-genre');
+        document.getElementById('filter-genre').value = val;
+        filterGenre = val;
+        hasFilter = true;
+        parts.push(`genere "${val}"`);
+    }
+    if (params.get('filter-platform')) {
+        const val = params.get('filter-platform');
+        document.getElementById('filter-platform').value = val;
+        filterPlatform = val;
+        hasFilter = true;
+        parts.push(`piattaforma "${val}"`);
+    }
+
+    if (hasFilter) {
+        const banner = document.getElementById('stats-banner');
+        document.getElementById('stats-banner-text').textContent =
+            `Mostrando: ${parts.join(', ')}. Clicca "Rimuovi filtro" per tornare alla lista completa.`;
+        banner.style.display = 'block';
+    }
+
+    if (hasFilter || params.get('tab')) {
+        renderList();
+    }
+}
+
+function clearStatsFilter() {
+    searchQuery = '';
+    filterGenre = '';
+    filterPlatform = '';
+    filterRating = '';
+    document.getElementById('search-input').value = '';
+    document.getElementById('filter-genre').value = '';
+    document.getElementById('filter-platform').value = '';
+    document.getElementById('filter-rating').value = '';
+    document.getElementById('stats-banner').style.display = 'none';
+    window.history.replaceState({}, document.title, window.location.pathname);
     renderList();
 }

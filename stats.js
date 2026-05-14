@@ -46,6 +46,10 @@ async function loadData() {
     }
 }
 
+function navTo(params) {
+    window.location.href = `list.html?${params}`;
+}
+
 function processAndRenderStats() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('stats-content').style.display = 'grid';
@@ -57,9 +61,9 @@ function processAndRenderStats() {
     const seenTv = Object.values(tvRatings).filter(r => r.seen && !r.partial);
     const abandonedTv = Object.values(tvRatings).filter(r => r.seen && r.partial);
 
-    document.getElementById('total-movies').innerText = seenMovies.length;
-    document.getElementById('total-tv').innerText = seenTv.length;
-    document.getElementById('total-abandoned').innerText = abandonedTv.length;
+    document.getElementById('total-movies').innerHTML = `<a href="list.html?tab=movies&view=history" style="color:inherit;text-decoration:none;cursor:pointer;">${seenMovies.length}</a>`;
+    document.getElementById('total-tv').innerHTML = `<a href="list.html?tab=tv&view=history" style="color:inherit;text-decoration:none;cursor:pointer;">${seenTv.length}</a>`;
+    document.getElementById('total-abandoned').innerHTML = `<a href="list.html?tab=tv&view=history&filter-rating=partial" style="color:inherit;text-decoration:none;cursor:pointer;">${abandonedTv.length}</a>`;
 
     const allSeen = [
         ...Object.keys(movieRatings).filter(id => movieRatings[id].seen).map(id => ({ id, type: 'movies', data: movieRatings[id] })),
@@ -87,7 +91,12 @@ function processAndRenderStats() {
         },
         options: {
             plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { color: '#aaa' } }, x: { ticks: { color: '#aaa' } } }
+            scales: { y: { beginAtZero: true, ticks: { color: '#aaa' } }, x: { ticks: { color: '#aaa' } } },
+            onClick: (e, els) => {
+                if (els.length === 0) return;
+                const rating = els[0].index + 1;
+                navTo(`tab=movies&view=history&filter-rating=${rating}`);
+            }
         }
     });
 
@@ -115,12 +124,19 @@ function processAndRenderStats() {
                 data: sortedGenres.length > 0 ? topGenreData : [1],
                 backgroundColor: 'rgba(138, 43, 226, 0.4)',
                 borderColor: '#8a2be2',
-                pointBackgroundColor: '#e50914'
+                pointBackgroundColor: '#e50914',
+                pointRadius: 5,
+                pointHoverRadius: 8
             }]
         },
         options: {
-            plugins: { legend: { position: 'bottom', labels: { color: '#aaa' } } },
-            scales: { r: { ticks: { display: false }, grid: { color: '#444' }, angleLines: { color: '#444' }, pointLabels: { color: '#ddd' } } }
+            plugins: { legend: { display: false } },
+            scales: { r: { ticks: { display: false }, grid: { color: '#444' }, angleLines: { color: '#444' }, pointLabels: { color: '#ddd' } } },
+            onClick: (e, els) => {
+                if (els.length === 0) return;
+                const genre = sortedGenres[els[0].index];
+                if (genre) navTo(`tab=movies&view=history&filter-genre=${encodeURIComponent(genre)}`);
+            }
         }
     });
 
@@ -152,7 +168,12 @@ function processAndRenderStats() {
         },
         options: {
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'right', labels: { color: '#aaa' } } }
+            plugins: { legend: { position: 'right', labels: { color: '#aaa', font: { size: 13 } } } },
+            onClick: (e, els) => {
+                if (els.length === 0) return;
+                const platform = sortedPlatforms[els[0].index];
+                if (platform) navTo(`tab=movies&view=history&filter-platform=${encodeURIComponent(platform)}`);
+            }
         }
     });
 }
